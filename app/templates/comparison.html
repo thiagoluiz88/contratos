@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="panel glass-card">
+    <div class="panel-head">
+        <div>
+            <h2>Comparação de contratos</h2>
+            <p>{{ contracts|length }} contratos selecionados.</p>
+        </div>
+        <a href="/compare" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
+    </div>
+
+    <div class="compare-top-cards">
+        {% for c in contracts %}
+        {% set meta = status_meta(c) %}
+        <article class="compare-top-card">
+            <div class="compare-top-head">
+                <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
+                <span class="pill outline {{ badge_class(c.risk_level) }}">{{ c.classification or '—' }}</span>
+            </div>
+            <h3>{{ c.operator_name or c.contract_name }}</h3>
+            <p>{{ c.contract_number or 'Sem número' }}</p>
+            <strong>{{ '%.1f'|format(c.score_total or 0) }}</strong>
+        </article>
+        {% endfor %}
+    </div>
+
+    <div class="table-wrap margin-top">
+        <table class="modern-table comparison-table">
+            <thead>
+                <tr>
+                    <th>Campo</th>
+                    {% for c in contracts %}
+                    <th>{{ c.operator_name or c.contract_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in comparison_rows %}
+                <tr>
+                    <td class="compare-label">{{ row.label }}</td>
+                    {% for value in row.values %}
+                    <td>{{ value }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

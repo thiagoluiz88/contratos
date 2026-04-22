@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title or 'Contracts Intelligence' }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-mark"><i class="fa-solid fa-wave-square"></i></div>
+            <div>
+                <div class="brand-title">Contracts Intelligence</div>
+                <div class="brand-subtitle">Hospital x Operadoras</div>
+            </div>
+        </div>
+        <nav class="nav-menu">
+            <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></a>
+            <a href="/contracts" class="nav-link {% if request.url.path.startswith('/contracts') and '/delete' not in request.url.path and request.url.path != '/contracts/upload' %}active{% endif %}"><i class="fa-regular fa-folder-open"></i><span>Contratos</span></a>
+            <a href="/alerts" class="nav-link {% if request.url.path.startswith('/alerts') %}active{% endif %}"><i class="fa-regular fa-bell"></i><span>Alertas</span></a>
+            <a href="/compare" class="nav-link {% if request.url.path.startswith('/compare') %}active{% endif %}"><i class="fa-solid fa-code-compare"></i><span>Comparar</span></a>
+            <a href="/upload" class="nav-link {% if request.url.path.startswith('/upload') %}active{% endif %}"><i class="fa-solid fa-cloud-arrow-up"></i><span>Upload Contrato</span></a>
+        </nav>
+        <div class="sidebar-footer"><div class="sidebar-note">Análise automatizada com OCR, edição manual, histórico de aditivos e exportação executiva.</div></div>
+    </aside>
+    <div class="main-shell">
+        <header class="topbar">
+            <div>
+                <h1 class="page-title">{{ title or 'Dashboard' }}</h1>
+                <p class="page-subtitle">Leia contratos, extraia dados, acompanhe vencimentos, revise campos e compare cláusulas críticas.</p>
+            </div>
+            <div class="topbar-actions">
+                <a href="/contracts/export.xlsx" class="btn btn-secondary"><i class="fa-solid fa-file-excel"></i> Exportar</a>
+                <a href="/upload" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Upload contrato</a>
+                <a href="/logout" class="btn btn-secondary"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</a>
+            </div>
+        </header>
+        <main class="content-area">{% block content %}{% endblock %}</main>
+    </div>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<main class="login-shell">
+<section class="login-card glass-card">
+    <div class="login-brand">
+        <div class="brand-mark"><i class="fa-solid fa-wave-square"></i></div>
+        <div>
+            <h1>Contracts Intelligence</h1>
+            <p>Sistema executivo de análise contratual hospitalar.</p>
+        </div>
+    </div>
+    <div class="login-copy">
+        <h2>Acesse o painel</h2>
+        <p>Use o login padrão <strong>admin</strong> e a senha <strong>admin123</strong>, ou altere por variável de ambiente.</p>
+    </div>
+    {% if error %}<div class="form-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login" class="form-grid single">
+        <label><span>Usuário</span><input type="text" name="username" value="admin" required></label>
+        <label><span>Senha</span><input type="password" name="password" value="admin123" required></label>
+        <button class="btn btn-primary btn-large" type="submit"><i class="fa-solid fa-lock"></i> Entrar</button>
+    </form>
+</section>
+</main>
+</body>
+</html>

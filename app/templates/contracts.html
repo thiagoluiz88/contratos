@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="contracts-hero glass-card">
+    <div class="contracts-hero-main">
+        <div>
+            <span class="eyebrow">Workspace contratual</span>
+            <h2>Gestao moderna da carteira de contratos</h2>
+            <p>Visualize score, risco, vigencia e qualidade da extracao em uma leitura executiva, pronta para operacao e revisao.</p>
+        </div>
+        <div class="contracts-hero-actions">
+            <a href="/upload" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Novo contrato</a>
+            <a href="/contracts/export.xlsx" class="btn btn-secondary"><i class="fa-solid fa-file-excel"></i> Exportar carteira</a>
+        </div>
+    </div>
+
+    <div class="contracts-summary-grid">
+        <article class="summary-tile">
+            <span>Contratos exibidos</span>
+            <strong>{{ summary.total }}</strong>
+            <small>{{ summary.operators }} operadoras na visao atual</small>
+        </article>
+        <article class="summary-tile">
+            <span>Score medio</span>
+            <strong>{{ '%.1f'|format(summary.avg_score) }}</strong>
+            <small>Panorama consolidado da carteira filtrada</small>
+        </article>
+        <article class="summary-tile">
+            <span>A vencer em 90 dias</span>
+            <strong>{{ summary.expiring_90 }}</strong>
+            <small>Contratos que pedem acompanhamento proximo</small>
+        </article>
+        <article class="summary-tile">
+            <span>Risco alto</span>
+            <strong>{{ summary.critical }}</strong>
+            <small>{{ summary.active_filters }} filtros ativos na consulta</small>
+        </article>
+    </div>
+</section>
+
+<section class="panel glass-card contracts-filter-panel">
+    <div class="panel-head">
+        <div>
+            <h2>Filtros e governanca</h2>
+            <p>Refine a carteira por operadora, status, risco e janela de vigencia.</p>
+        </div>
+        <div class="inline-actions">
+            <a href="/contracts/export.csv" class="btn btn-secondary"><i class="fa-solid fa-file-csv"></i> CSV</a>
+            <a href="/contracts" class="btn btn-secondary"><i class="fa-solid fa-rotate-left"></i> Limpar</a>
+        </div>
+    </div>
+
+    <form method="get" class="filters-grid contracts-filters">
+        <label class="field-group field-search">
+            <span>Busca inteligente</span>
+            <input type="text" name="search" placeholder="Contrato, operadora ou numero" value="{{ filters.search }}">
+        </label>
+        <label class="field-group">
+            <span>Operadora</span>
+            <select name="operator">
+                <option value="">Todas as operadoras</option>
+                {% for op in operators %}
+                <option value="{{ op }}" {% if filters.operator == op %}selected{% endif %}>{{ op }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="field-group">
+            <span>Status</span>
+            <select name="status">
+                <option value="">Todos os status</option>
+                <option value="vigente" {% if filters.status == 'vigente' %}selected{% endif %}>Vigente</option>
+                <option value="a_vencer" {% if filters.status == 'a_vencer' %}selected{% endif %}>A vencer</option>
+                <option value="vencido" {% if filters.status == 'vencido' %}selected{% endif %}>Vencido</option>
+                <option value="critico" {% if filters.status == 'critico' %}selected{% endif %}>Critico</option>
+            </select>
+        </label>
+        <label class="field-group">
+            <span>Risco</span>
+            <select name="risk">
+                <option value="">Todos os riscos</option>
+                <option value="baixo" {% if filters.risk == 'baixo' %}selected{% endif %}>Baixo</option>
+                <option value="moderado" {% if filters.risk == 'moderado' %}selected{% endif %}>Moderado</option>
+                <option value="alto" {% if filters.risk == 'alto' %}selected{% endif %}>Alto</option>
+                <option value="muito alto" {% if filters.risk == 'muito alto' %}selected{% endif %}>Muito alto</option>
+            </select>
+        </label>
+        <label class="field-group">
+            <span>Fim de vigencia de</span>
+            <input type="date" name="start_from" value="{{ filters.start_from }}">
+        </label>
+        <label class="field-group">
+            <span>Ate</span>
+            <input type="date" name="end_to" value="{{ filters.end_to }}">
+        </label>
+        <div class="filter-submit">
+            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter"></i> Aplicar filtros</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel glass-card">
+    <div class="panel-head compact">
+        <div>
+            <h2>Carteira contratual</h2>
+            <p>Leitura operacional com score, risco, vigencia e rastreabilidade por contrato.</p>
+        </div>
+    </div>
+
+    <div class="table-wrap margin-top contracts-table-wrap">
+        <table class="modern-table">
+            <thead>
+                <tr>
+                    <th>Operadora</th>
+                    <th>Contrato</th>
+                    <th>Vigencia</th>
+                    <th>Score</th>
+                    <th>Risco</th>
+                    <th>Extracao</th>
+                    <th>Acoes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in contracts %}
+                {% set meta = status_meta(c) %}
+                <tr>
+                    <td>
+                        <div class="table-primary">{{ c.operator_name or 'Nao informada' }}</div>
+                        <div class="table-note">Origem {{ c.original_filename or 'manual' }}</div>
+                    </td>
+                    <td>
+                        <div class="table-primary">{{ c.contract_name or 'Contrato sem nome' }}</div>
+                        <div class="table-note">Numero {{ c.contract_number or 'nao identificado' }}</div>
+                    </td>
+                    <td>
+                        <div class="table-primary">{{ c.start_date or '-' }} ate {{ c.end_date or '-' }}</div>
+                        <div class="contract-date-meta">
+                            <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
+                            <span class="table-note">{{ c.days_until_end_view if c.days_until_end_view is not none else '-' }} dias restantes</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="score-cell">
+                            <strong>{{ '%.1f'|format(c.score_total or 0) }}</strong>
+                            <div class="score-inline-track">
+                                <div class="score-inline-fill" style="width: {{ c.score_total or 0 }}%;"></div>
+                            </div>
+                            <span class="table-note">{{ c.classification or 'Sem classificacao' }}</span>
+                        </div>
+                    </td>
+                    <td><span class="pill outline {{ badge_class(c.risk_level) }}">{{ c.risk_level or 'nao classificado' }}</span></td>
+                    <td>
+                        <div class="table-primary">{{ c.extraction_method or 'Nao informado' }}</div>
+                        <div class="table-note">{% if c.extraction_confidence %}Confianca {{ '%.0f'|format(c.extraction_confidence * 100) }}%{% else %}Sem percentual de confianca{% endif %}</div>
+                    </td>
+                    <td>
+                        <div class="inline-actions">
+                            <a class="btn btn-secondary btn-sm" href="/contracts/{{ c.id }}">Abrir</a>
+                            <a class="btn btn-secondary btn-sm" href="/contracts/{{ c.id }}?edit=1">Editar</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7"><div class="empty-state inline">Nenhum contrato encontrado.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

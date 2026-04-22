@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="panel glass-card">
+    <div class="panel-head">
+        <div>
+            <h2>Selecionar contratos para comparação</h2>
+            <p>Compare prazos, glosa, reajuste e tabelas entre operadoras.</p>
+        </div>
+        <button class="btn btn-primary" type="button" onclick="openComparison()"><i class="fa-solid fa-arrow-right"></i> Comparar agora</button>
+    </div>
+    <div class="card-grid compare-select-grid">
+        {% for c in contracts %}
+        {% set meta = status_meta(c) %}
+        <label class="select-card">
+            <input type="checkbox" class="compare-check" value="{{ c.id }}">
+            <div class="select-card-body">
+                <div class="select-card-top">
+                    <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
+                    <span class="pill outline {{ badge_class(c.risk_level) }}">{{ c.classification or '—' }}</span>
+                </div>
+                <h3>{{ c.operator_name or c.contract_name }}</h3>
+                <p>{{ c.contract_number or 'Sem número' }}</p>
+                <div class="contract-mini-grid two">
+                    <div><span>Score</span><strong>{{ '%.1f'|format(c.score_total or 0) }}</strong></div>
+                    <div><span>Pagamento</span><strong>{{ c.payment_term_days ~ ' dias' if c.payment_term_days else '—' }}</strong></div>
+                </div>
+            </div>
+        </label>
+        {% else %}
+        <div class="empty-state">Nenhum contrato disponível para comparação.</div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openComparison() {
+    const ids = Array.from(document.querySelectorAll('.compare-check:checked')).map(el => el.value);
+    if (ids.length < 2) {
+        alert('Selecione pelo menos 2 contratos para comparar.');
+        return;
+    }
+    window.location.href = `/compare/result?ids=${ids.join(',')}`;
+}
+</script>
+{% endblock %}
