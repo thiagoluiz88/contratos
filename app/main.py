@@ -73,9 +73,8 @@ def parse_bool_input(value: str | None) -> bool:
     return str(value).lower() in {"1", "true", "on", "sim", "yes"}
 
 
-def require_auth(request: Request) -> None:
-    if not request.session.get("user"):
-        raise HTTPException(status_code=303, detail="not_authenticated")
+def require_auth(request: Request) -> str | None:
+    return request.session.get("user")
 
 
 def maybe_redirect_auth(request: Request):
@@ -412,16 +411,17 @@ templates.env.globals.update(badge_class=badge_class, status_meta=status_meta)
 def login_page(request: Request):
     if request.session.get("user"):
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"request": request, "title": "Entrar", "error": None, "login_page": True})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "title": "Entrar", "error": False, "login_page": True, "username": "", "remember": False})
 
 
 @app.post("/login", response_class=HTMLResponse)
-def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+def login_submit(request: Request, username: str = Form(...), password: str = Form(...), remember: str | None = Form(default=None)):
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     if username == ADMIN_USER and password_hash == ADMIN_PASSWORD_HASH:
         request.session["user"] = username
+        request.session["remember"] = bool(remember)
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"request": request, "title": "Entrar", "error": "Usuário ou senha inválidos.", "login_page": True}, status_code=400)
+    return templates.TemplateResponse(request, "login.html", {"request": request, "title": "Entrar", "error": True, "login_page": True, "username": username, "remember": bool(remember)}, status_code=400)
 
 
 @app.get("/logout")
