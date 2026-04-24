@@ -3,131 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | Contracts Intelligence</title>
+    <title>{% if register_page %}Criar Cadastro{% else %}Login{% endif %} | Contracts Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/login.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v=login-2">
 </head>
 <body>
-    <main class="login-page">
-        <section class="login-showcase" aria-hidden="true">
-            <div class="showcase-overlay"></div>
-            <div class="showcase-curves">
-                <svg viewBox="0 0 280 1024" preserveAspectRatio="none" role="presentation">
-                    <path d="M90 0C220 160 230 330 112 492C18 621 28 784 188 1024"></path>
-                    <path d="M155 0C290 168 284 394 150 554C66 654 80 838 228 1024"></path>
-                </svg>
+    <main class="login-layout login-layout-premium">
+        <section class="login-hero" aria-label="Apresentação">
+            <a class="brand brand-login" href="/login">
+                <span class="brand-mark">
+                    <svg viewBox="0 0 24 24" role="img" aria-label="Check">
+                        <path d="M9.1 16.3 4.8 12l-1.6 1.6 5.9 5.9L21.2 7.4l-1.6-1.6z"></path>
+                    </svg>
+                </span>
+                <span>
+                    <strong>Contracts Intelligence</strong>
+                    <small>Gestão de Contratos</small>
+                </span>
+            </a>
+            <div class="login-hero-copy">
+                <span class="eyebrow">Contracts Intelligence</span>
+                <h1>Gestão de Contratos com Operadoras de Saúde</h1>
+                <p>Centralize, organize e analise todos os contratos do seu hospital com inteligência e segurança.</p>
             </div>
-            <div class="showcase-content">
-                <div class="showcase-brand">
-                    <div class="brand-icon">
-                        <svg viewBox="0 0 24 24" role="img" aria-label="Check">
-                            <path d="M9.2 16.2 4.8 11.8l-1.6 1.6 6 6 12-12-1.6-1.6z"></path>
-                        </svg>
+            <div class="login-benefits" aria-label="Benefícios">
+                <article>
+                    <span>✓</span>
+                    <div>
+                        <strong>Segurança de dados</strong>
+                        <small>Controle de acesso, sessão protegida e visão confiável das informações contratuais.</small>
                     </div>
-                    <div class="brand-text">Contracts Intelligence</div>
-                </div>
-                <div class="showcase-copy">
-                    <span class="eyebrow">Contracts Intelligence</span>
-                    <h1>Gestão de Contratos<br>com Operadoras de Saúde</h1>
-                    <p>Centralize, organize e analise todos os contratos do seu hospital com inteligência e segurança.</p>
-                </div>
-                <div class="showcase-benefits">
-                    <article class="benefit-item">
-                        <span class="benefit-icon">
-                            <svg viewBox="0 0 24 24" role="presentation"><path d="M12 2 5 5v6c0 5 3.4 9.4 7 11 3.6-1.6 7-6 7-11V5zM10.8 15.5 8 12.7l1.4-1.4 1.4 1.4 3.8-3.8 1.4 1.4z"></path></svg>
-                        </span>
-                        <div>
-                            <h2>Segurança de dados</h2>
-                            <p>Controle de acesso, sessão protegida e visão confiável das informações contratuais.</p>
-                        </div>
-                    </article>
-                    <article class="benefit-item">
-                        <span class="benefit-icon">
-                            <svg viewBox="0 0 24 24" role="presentation"><path d="M4 19h16v2H2V3h2zm3-2H5V9h2zm5 0h-2V5h2zm5 0h-2v-7h2z"></path></svg>
-                        </span>
-                        <div>
-                            <h2>Análises inteligentes</h2>
-                            <p>Identifique riscos, prazos críticos e oportunidades de revisão com mais agilidade.</p>
-                        </div>
-                    </article>
-                    <article class="benefit-item">
-                        <span class="benefit-icon">
-                            <svg viewBox="0 0 24 24" role="presentation"><path d="M7 4h10l3 3v13H4V4zm9 1.5V8h2.5zM8 11h8v2H8zm0 4h8v2H8z"></path></svg>
-                        </span>
-                        <div>
-                            <h2>Gestão completa de contratos</h2>
-                            <p>Organize documentos, acompanhamento operacional e histórico entre hospital e operadora.</p>
-                        </div>
-                    </article>
-                </div>
-                <footer class="showcase-footer">
-                    <span class="footer-icon">
-                        <svg viewBox="0 0 24 24" role="presentation"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-7-2a2 2 0 1 1 4 0v2h-4z"></path></svg>
-                    </span>
-                    <span>Sistema seguro e em conformidade com a LGPD</span>
-                </footer>
+                </article>
+                <article>
+                    <span>↗</span>
+                    <div>
+                        <strong>Análises inteligentes</strong>
+                        <small>Identifique riscos, prazos críticos e oportunidades de revisão com mais agilidade.</small>
+                    </div>
+                </article>
+                <article>
+                    <span>▤</span>
+                    <div>
+                        <strong>Gestão completa</strong>
+                        <small>Organize documentos, aditivos, operadoras e histórico em um único painel.</small>
+                    </div>
+                </article>
             </div>
         </section>
-        <section class="login-form-panel">
+
+        <section class="login-panel">
             <div class="login-card">
                 <div class="login-card-header">
-                    <div class="user-badge">
-                        <svg viewBox="0 0 24 24" role="presentation"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4m0 2c-3.3 0-6 1.8-6 4v1h12v-1c0-2.2-2.7-4-6-4"></path></svg>
-                    </div>
-                    <h2>Bem-vindo de volta!</h2>
-                    <p>Faça login para acessar o sistema</p>
+                    <span class="login-badge">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4m0 2c-3.3 0-6 1.8-6 4v1h12v-1c0-2.2-2.7-4-6-4"></path></svg>
+                    </span>
+                    <h2>{% if register_page %}Criar cadastro{% else %}Bem-vindo de volta!{% endif %}</h2>
+                    <p>{% if register_page %}Cadastre um login para acessar o sistema{% else %}Faça login para acessar o sistema{% endif %}</p>
                 </div>
+
+                <div class="auth-tabs" aria-label="Acesso">
+                    <a class="{% if not register_page %}active{% endif %}" href="/login">Entrar</a>
+                    <a class="{% if register_page %}active{% endif %}" href="/register">Criar cadastro</a>
+                </div>
+
                 {% if error %}
-                <div class="login-error" role="alert">Usuário ou senha inválidos.</div>
+                <div class="form-alert" role="alert">{{ error }}</div>
                 {% endif %}
-                <form method="post" action="/login" class="login-form" id="loginForm" novalidate>
-                    <div class="field-group">
-                        <label for="username">Usuário</label>
-                        <div class="input-shell">
-                            <span class="input-icon"><svg viewBox="0 0 24 24" role="presentation"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4m0 2c-3.3 0-6 1.8-6 4v1h12v-1c0-2.2-2.7-4-6-4"></path></svg></span>
-                            <input id="username" name="username" type="text" placeholder="Digite seu usuário" value="{{ username or '' }}" autocomplete="username" required>
-                        </div>
-                        <span class="field-error" data-error-for="username"></span>
-                    </div>
-                    <div class="field-group">
-                        <label for="password">Senha</label>
-                        <div class="input-shell">
-                            <span class="input-icon"><svg viewBox="0 0 24 24" role="presentation"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-7-2a2 2 0 1 1 4 0v2h-4z"></path></svg></span>
-                            <input id="password" name="password" type="password" placeholder="Digite sua senha" autocomplete="current-password" required>
-                            <button class="password-toggle" type="button" id="passwordToggle" aria-label="Mostrar senha" aria-pressed="false">
-                                <svg class="icon-eye" viewBox="0 0 24 24" role="presentation"><path d="M12 5c5.5 0 9.5 5.2 10.7 7-1.2 1.8-5.2 7-10.7 7S2.5 13.8 1.3 12C2.5 10.2 6.5 5 12 5m0 2c-3.6 0-6.8 3-8.2 5 1.4 2 4.6 5 8.2 5s6.8-3 8.2-5c-1.4-2-4.6-5-8.2-5m0 2.2A2.8 2.8 0 1 1 9.2 12 2.8 2.8 0 0 1 12 9.2"></path></svg>
-                                <svg class="icon-eye-off" viewBox="0 0 24 24" role="presentation"><path d="m3 4.3 1.4-1.4 16.3 16.3-1.4 1.4-3-3A11.7 11.7 0 0 1 12 19C6.5 19 2.5 13.8 1.3 12A21.7 21.7 0 0 1 6 7.4zm6.6 6.6 4.1 4.1A2.8 2.8 0 0 1 9.6 11m10.4 1.1a21.7 21.7 0 0 1-3.2 4.3l-1.5-1.5A9.8 9.8 0 0 0 20.2 12c-1.4-2-4.6-5-8.2-5a8.8 8.8 0 0 0-2.5.4L7.7 5.6A11.6 11.6 0 0 1 12 5c5.5 0 9.5 5.2 10.7 7M12 9.2a2.8 2.8 0 0 1 2.8 2.8c0 .4-.1.8-.3 1.1l-3.6-3.6c.3-.2.7-.3 1.1-.3"></path></svg>
-                            </button>
-                        </div>
-                        <span class="field-error" data-error-for="password"></span>
-                    </div>
-                    <div class="form-meta">
-                        <label class="checkbox-row" for="remember">
-                            <input id="remember" name="remember" type="checkbox" {% if remember %}checked{% endif %}>
+
+                {% if register_page %}
+                <form method="post" action="/register" class="auth-form">
+                    <label>
+                        <span>Nome completo</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4m0 2c-3.3 0-6 1.8-6 4v1h12v-1c0-2.2-2.7-4-6-4"></path></svg>
+                            <input name="full_name" type="text" placeholder="Digite seu nome" value="{{ full_name or '' }}" autocomplete="name" required>
+                        </span>
+                    </label>
+                    <label>
+                        <span>Email</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2m0 4-8 5-8-5V6l8 5 8-5z"></path></svg>
+                            <input name="email" type="email" placeholder="seu.email@hospital.com.br" value="{{ email or '' }}" autocomplete="email" required>
+                        </span>
+                    </label>
+                    <label>
+                        <span>Usuário</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4m0 2c-3.3 0-6 1.8-6 4v1h12v-1c0-2.2-2.7-4-6-4"></path></svg>
+                            <input name="username" type="text" placeholder="Escolha um usuário" value="{{ username or '' }}" autocomplete="username" required>
+                        </span>
+                    </label>
+                    <label>
+                        <span>Senha</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-7-2a2 2 0 1 1 4 0v2h-4z"></path></svg>
+                            <input name="password" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" required>
+                        </span>
+                    </label>
+                    <label>
+                        <span>Confirmar senha</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-7-2a2 2 0 1 1 4 0v2h-4z"></path></svg>
+                            <input name="password_confirm" type="password" placeholder="Confirme sua senha" autocomplete="new-password" required>
+                        </span>
+                    </label>
+                    <button class="primary-button" type="submit">Criar cadastro</button>
+                </form>
+                {% else %}
+                <form method="post" action="/login" class="auth-form">
+                    <label>
+                        <span>Usuário</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4m0 2c-3.3 0-6 1.8-6 4v1h12v-1c0-2.2-2.7-4-6-4"></path></svg>
+                            <input name="username" type="text" placeholder="Digite seu usuário" value="{{ username or '' }}" autocomplete="username" required>
+                        </span>
+                    </label>
+                    <label>
+                        <span>Senha</span>
+                        <span class="auth-input">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-7-2a2 2 0 1 1 4 0v2h-4z"></path></svg>
+                            <input name="password" type="password" placeholder="Digite sua senha" autocomplete="current-password" required>
+                        </span>
+                    </label>
+                    <div class="auth-meta">
+                        <label class="check-row">
+                            <input name="remember" value="1" type="checkbox" {% if remember %}checked{% endif %}>
                             <span>Lembrar meu acesso</span>
                         </label>
-                        <a href="#" class="forgot-link">Esqueci minha senha</a>
+                        <a href="#">Esqueci minha senha</a>
                     </div>
-                    <button class="primary-button" type="submit" id="submitButton">
-                        <span class="button-icon"><svg viewBox="0 0 24 24" role="presentation"><path d="M10 17 15 12 10 7v3H3v4h7zm9-14H9a2 2 0 0 0-2 2v3h2V5h10v14H9v-3H7v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2"></path></svg></span>
-                        <span class="button-text">Entrar no sistema</span>
-                    </button>
-                    <div class="separator">
-                        <span></span>
-                        <strong>ou</strong>
-                        <span></span>
-                    </div>
-                    <button class="secondary-button" type="button">
-                        <span class="button-icon"><svg viewBox="0 0 24 24" role="presentation"><path d="M12 2 5 5v6c0 5 3.4 9.4 7 11 3.6-1.6 7-6 7-11V5zm0 2.2 5 2v4.8c0 3.7-2.3 7.2-5 8.7-2.7-1.5-5-5-5-8.7V6.2z"></path></svg></span>
-                        <span>Entrar com SSO</span>
-                    </button>
+                    <button class="primary-button" type="submit">Entrar no sistema</button>
                 </form>
-                <footer class="login-card-footer">© 2024 Contracts Intelligence. Todos os direitos reservados.</footer>
+                {% endif %}
             </div>
         </section>
     </main>
-    <script src="{{ url_for('static', path='js/login.js') }}"></script>
 </body>
 </html>

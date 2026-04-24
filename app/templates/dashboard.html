@@ -1,320 +1,181 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+
 {% block content %}
-<section class="dashboard-hero glass-card">
-    <div class="dashboard-hero-main">
-        <div>
-            <span class="eyebrow">Command center</span>
-            <h2>Visao executiva da carteira contratual</h2>
-            <p>Monitore vencimentos, risco, score e concentracao operacional em uma tela desenhada para tomada de decisao rapida.</p>
-        </div>
-        <div class="dashboard-hero-actions">
-            <a href="/contracts" class="btn btn-secondary"><i class="fa-regular fa-folder-open"></i> Abrir carteira</a>
-            <a href="/upload" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Novo contrato</a>
-        </div>
+<header class="topbar">
+    <div>
+        <h1>Olá, Allan! 👋</h1>
+        <p>Aqui está o resumo executivo da gestão dos seus contratos.</p>
     </div>
-
-    <div class="dashboard-hero-grid">
-        <article class="dashboard-spotlight">
-            <span>Janela critica</span>
-            <strong>{{ metrics.due_90 }}</strong>
-            <small>Contratos a vencer em ate 90 dias</small>
-        </article>
-        <article class="dashboard-spotlight">
-            <span>Risco elevado</span>
-            <strong>{{ metrics.critical }}</strong>
-            <small>Contratos com risco alto ou muito alto</small>
-        </article>
-        <article class="dashboard-spotlight">
-            <span>Base ativa</span>
-            <strong>{{ metrics.total }}</strong>
-            <small>Total de contratos monitorados no sistema</small>
-        </article>
+    <div class="topbar-actions">
+        <label class="search-box" aria-label="Buscar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
+            <input id="contractSearch" type="search" placeholder="Buscar contratos, operadoras...">
+        </label>
+        <button class="icon-button" type="button" aria-label="Notificações">
+            <span>🔔</span>
+            <b class="floating-badge">3</b>
+        </button>
+        <button id="newContractButton" class="primary-button compact" type="button">+ Novo contrato</button>
+        <button class="period-button" type="button">12/05/2024 - 12/06/2024</button>
     </div>
-</section>
+</header>
 
-<section class="dashboard-kpi-grid">
-    <article class="metric-card tone-blue dashboard-metric">
-        <div>
-            <span class="metric-label">Contratos cadastrados</span>
-            <strong class="metric-value">{{ metrics.total }}</strong>
-            <span class="metric-foot">Base total para analise contratual</span>
-        </div>
-        <i class="fa-regular fa-file-lines metric-icon"></i>
+<section class="metric-grid" aria-label="Indicadores principais">
+    <article class="metric-card reveal">
+        <span class="metric-icon green">▤</span>
+        <div><p>Contratos ativos</p><strong>128</strong><small>+8 este mês</small></div>
     </article>
-    <article class="metric-card tone-teal dashboard-metric">
-        <div>
-            <span class="metric-label">A vencer em 90 dias</span>
-            <strong class="metric-value">{{ metrics.due_90 }}</strong>
-            <span class="metric-foot">Janela prioritaria de renegociacao</span>
-        </div>
-        <i class="fa-regular fa-clock metric-icon"></i>
+    <article class="metric-card reveal">
+        <span class="metric-icon orange">◷</span>
+        <div><p>Vencendo em 30 dias</p><strong>15</strong><small>+3 em relação ao mês anterior</small></div>
     </article>
-    <article class="metric-card tone-violet dashboard-metric">
-        <div>
-            <span class="metric-label">Risco alto ou muito alto</span>
-            <strong class="metric-value">{{ metrics.critical }}</strong>
-            <span class="metric-foot">Clausulas criticas ou score baixo</span>
-        </div>
-        <i class="fa-solid fa-triangle-exclamation metric-icon"></i>
+    <article class="metric-card reveal">
+        <span class="metric-icon yellow">◷</span>
+        <div><p>Vencendo em 60 dias</p><strong>28</strong><small>+5 em relação ao mês anterior</small></div>
     </article>
-    <article class="metric-card tone-amber dashboard-metric">
-        <div>
-            <span class="metric-label">Sem indice de reajuste</span>
-            <strong class="metric-value">{{ metrics.without_reajust_index }}</strong>
-            <span class="metric-foot">Reajuste identificado, sem indice claro</span>
-        </div>
-        <i class="fa-solid fa-chart-line metric-icon"></i>
+    <article class="metric-card reveal">
+        <span class="metric-icon red">!</span>
+        <div><p>Vencidos</p><strong>7</strong><small>+2 em relação ao mês anterior</small></div>
+    </article>
+    <article class="metric-card reveal">
+        <span class="metric-icon purple">↗</span>
+        <div><p>Sem reajuste</p><strong>18</strong><small>+4 em relação ao mês anterior</small></div>
+    </article>
+    <article class="metric-card reveal">
+        <span class="metric-icon green">◎</span>
+        <div><p>Score médio</p><strong>82/100</strong><small>Muito bom</small></div>
     </article>
 </section>
 
-<section class="dashboard-main-grid">
-    <div class="dashboard-primary-stack">
-        <section class="panel glass-card dashboard-panel">
-            <div class="panel-head">
-                <div>
-                    <h2>Painel de desempenho</h2>
-                    <p>Distribuicao de vigencia e score para leitura instantanea da carteira.</p>
-                </div>
-            </div>
-            <div class="dashboard-chart-grid">
-                <div class="chart-box dashboard-chart-card">
-                    <div class="chart-card-head">
-                        <span>Status contratual</span>
-                        <strong>Vigencia da base</strong>
-                    </div>
-                    <canvas id="statusChart"></canvas>
-                </div>
-                <div class="chart-box dashboard-chart-card">
-                    <div class="chart-card-head">
-                        <span>Faixas de score</span>
-                        <strong>Qualidade contratual</strong>
-                    </div>
-                    <canvas id="scoreChart"></canvas>
-                </div>
-            </div>
-        </section>
+<section class="dashboard-grid first-row">
+    <article class="panel chart-panel reveal">
+        <div class="panel-header">
+            <h2>Vencimentos dos contratos</h2>
+            <button class="ghost-button" type="button">Próximos 120 dias</button>
+        </div>
+        <div class="chart-area tall">
+            <canvas id="expirationChart"></canvas>
+        </div>
+    </article>
 
-        <section class="dashboard-split-grid">
-            <section class="panel glass-card dashboard-panel">
-                <div class="panel-head">
-                    <div>
-                        <h2>Contratos a vencer</h2>
-                        <p>Priorize negociacao, renovacao ou denuncia dentro da janela critica.</p>
-                    </div>
-                    <a href="/contracts?status=a_vencer" class="text-link">Filtrar contratos</a>
-                </div>
-                <div class="table-wrap">
-                    <table class="modern-table">
-                        <thead>
-                            <tr>
-                                <th>Operadora</th>
-                                <th>Contrato</th>
-                                <th>Vigencia final</th>
-                                <th>Dias restantes</th>
-                                <th>Score</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for c in expiring_contracts %}
-                            {% set meta = status_meta(c) %}
-                            <tr>
-                                <td>{{ c.operator_name or '-' }}</td>
-                                <td><a href="/contracts/{{ c.id }}">{{ c.contract_number or c.contract_name }}</a></td>
-                                <td>{{ c.end_date or '-' }}</td>
-                                <td>{{ (c.end_date - today).days if c.end_date else '-' }}</td>
-                                <td>{{ '%.1f'|format(c.score_total or 0) }}</td>
-                                <td><span class="pill {{ meta.tone }}">{{ meta.label }}</span></td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="6"><div class="empty-state inline">Nenhum contrato proximo do vencimento.</div></td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+    <article class="panel reveal">
+        <div class="panel-header">
+            <h2>Contratos por operadora</h2>
+            <a href="#">Ver todas</a>
+        </div>
+        <div class="donut-layout">
+            <div class="chart-area donut"><canvas id="operatorChart"></canvas></div>
+            <ul class="legend-list" id="operatorLegend"></ul>
+        </div>
+    </article>
 
-            <section class="panel glass-card dashboard-panel">
-                <div class="panel-head">
-                    <div>
-                        <h2>Composicao da base</h2>
-                        <p>Operadoras mais frequentes e mix de tabelas na carteira atual.</p>
-                    </div>
-                </div>
-                <div class="dashboard-chart-grid dashboard-chart-grid-single">
-                    <div class="chart-box dashboard-chart-card">
-                        <div class="chart-card-head">
-                            <span>Top operadoras</span>
-                            <strong>Concentracao</strong>
-                        </div>
-                        <canvas id="operatorsChart"></canvas>
-                    </div>
-                    <div class="chart-box dashboard-chart-card">
-                        <div class="chart-card-head">
-                            <span>Tabelas utilizadas</span>
-                            <strong>Mix contratual</strong>
-                        </div>
-                        <canvas id="tableMixChart"></canvas>
-                    </div>
-                </div>
-            </section>
-        </section>
-    </div>
-
-    <aside class="dashboard-side-stack">
-        <section class="panel glass-card dashboard-panel">
-            <div class="panel-head compact">
-                <div>
-                    <h2>Radar executivo</h2>
-                    <p>Indicadores rapidos de revisao contratual.</p>
-                </div>
-            </div>
-            <div class="dashboard-radar-grid">
-                <div class="mini-kpi"><span>Renovacao automatica</span><strong>{{ metrics.with_auto_renew }}</strong></div>
-                <div class="mini-kpi"><span>Vencidos</span><strong>{{ metrics.expired }}</strong></div>
-                <div class="mini-kpi"><span>A vencer em 60 dias</span><strong>{{ metrics.due_60 }}</strong></div>
-                <div class="mini-kpi"><span>A vencer em 30 dias</span><strong>{{ metrics.due_30 }}</strong></div>
-            </div>
-        </section>
-
-        <section class="panel glass-card dashboard-panel">
-            <div class="panel-head compact">
-                <div>
-                    <h2>Alertas recentes</h2>
-                    <p>Pontos que exigem revisao manual imediata.</p>
-                </div>
-                <a href="/alerts" class="text-link">Ver todos</a>
-            </div>
-            <div class="alert-list dashboard-alert-list">
-                {% for row in recent_alerts %}
-                <a class="alert-item dashboard-alert-item" href="/contracts/{{ row.contract.id }}">
-                    <span class="status-dot {{ badge_class(row.contract.risk_level) }}"></span>
-                    <div>
-                        <strong>{{ row.contract.operator_name or row.contract.contract_name }}</strong>
-                        <p>{{ row.text }}</p>
-                    </div>
-                </a>
-                {% else %}
-                <div class="empty-state small">Nenhum alerta encontrado.</div>
-                {% endfor %}
-            </div>
-        </section>
-    </aside>
+    <article class="panel reveal">
+        <div class="panel-header">
+            <h2>Alertas críticos</h2>
+            <a href="#">Ver todos (12)</a>
+        </div>
+        <ul class="alert-list">
+            <li><span class="dot red"></span><div><strong>5 contratos vencem em até 15 dias</strong><small>Ação recomendada: Renovar contrato</small></div></li>
+            <li><span class="dot orange"></span><div><strong>3 contratos sem reajuste anual</strong><small>Ação recomendada: Revisar cláusulas</small></div></li>
+            <li><span class="dot orange"></span><div><strong>2 aditivos pendentes de assinatura</strong><small>Ação recomendada: Acompanhar assinatura</small></div></li>
+            <li><span class="dot blue"></span><div><strong>4 contratos com cláusulas críticas</strong><small>Ação recomendada: Revisar</small></div></li>
+            <li><span class="dot green"></span><div><strong>Documentos vencendo em 30 dias</strong><small>Ação recomendada: Atualizar documentos</small></div></li>
+        </ul>
+    </article>
 </section>
 
-<section class="panel glass-card dashboard-panel">
-    <div class="panel-head">
-        <div>
-            <h2>Ultimos contratos analisados</h2>
-            <p>Acesso rapido as analises mais recentes da carteira.</p>
+<section class="dashboard-grid second-row">
+    <article class="panel reveal">
+        <div class="panel-header"><h2>Status dos contratos</h2></div>
+        <div class="donut-layout">
+            <div class="chart-area donut"><canvas id="statusChart"></canvas></div>
+            <ul class="legend-list" id="statusLegend"></ul>
         </div>
-        <a href="/contracts" class="text-link">Abrir lista completa</a>
-    </div>
-    <div class="card-grid dashboard-contract-grid">
-        {% for c in recent_contracts %}
-        {% set meta = status_meta(c) %}
-        <article class="contract-card dashboard-contract-card">
-            <div class="contract-card-top">
-                <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
-                <span class="pill outline {{ badge_class(c.risk_level) }}">{{ c.classification or 'Sem classificacao' }}</span>
-            </div>
-            <h3>{{ c.operator_name or c.contract_name }}</h3>
-            <p class="contract-meta">Contrato {{ c.contract_number or 'nao identificado' }}</p>
-            <div class="contract-mini-grid">
-                <div><span>Pagamento</span><strong>{{ c.payment_term_days ~ ' dias' if c.payment_term_days else '-' }}</strong></div>
-                <div><span>Faturamento</span><strong>{{ c.billing_deadline_days ~ ' dias' if c.billing_deadline_days else '-' }}</strong></div>
-                <div><span>Score</span><strong>{{ '%.1f'|format(c.score_total or 0) }}</strong></div>
-                <div><span>Tabela</span><strong>{{ c.medical_fee_table or '-' }}</strong></div>
-            </div>
-            <a href="/contracts/{{ c.id }}" class="btn btn-secondary btn-block">Ver analise</a>
-        </article>
-        {% else %}
-        <div class="empty-state">Nenhum contrato cadastrado. Faca upload do primeiro contrato para iniciar o dashboard.</div>
-        {% endfor %}
-    </div>
+    </article>
+
+    <article class="panel reveal">
+        <div class="panel-header"><h2>Tipos de tabelas utilizadas</h2></div>
+        <div class="donut-layout">
+            <div class="chart-area donut"><canvas id="tableTypeChart"></canvas></div>
+            <ul class="legend-list" id="tableTypeLegend"></ul>
+        </div>
+    </article>
+
+    <article class="panel reveal">
+        <div class="panel-header">
+            <h2>Atividades recentes</h2>
+            <a href="#">Ver todas</a>
+        </div>
+        <ol class="activity-list">
+            <li><time>Há 2 horas</time><strong>Aditivo assinado</strong><span>Unimed - Aditivo 03/2024 assinado</span></li>
+            <li><time>Há 4 horas</time><strong>Contrato adicionado</strong><span>Hapvida - CT-2024-0123</span></li>
+            <li><time>Há 8 horas</time><strong>Reajuste aplicado</strong><span>Bradesco Saúde - Reajuste anual (6,12%)</span></li>
+            <li><time>Há 1 dia</time><strong>Alerta resolvido</strong><span>Contrato SulAmérica renovado</span></li>
+            <li><time>Há 2 dias</time><strong>Documento vencido</strong><span>Amil - CNH vencida</span></li>
+        </ol>
+    </article>
+</section>
+
+<section class="dashboard-grid third-row">
+    <article class="panel attention-panel reveal">
+        <div class="panel-header"><h2>Contratos que precisam de atenção</h2></div>
+        <div class="table-wrap">
+            <table class="attention-table">
+                <thead>
+                    <tr>
+                        <th>Contrato</th>
+                        <th>Operadora</th>
+                        <th>Vigência</th>
+                        <th>Motivo</th>
+                        <th>Ação recomendada</th>
+                    </tr>
+                </thead>
+                <tbody id="contractsTable">
+                    <tr>
+                        <td>CT-2024-0021</td><td>Unimed</td><td>15/06/2024</td>
+                        <td><span class="status-badge red">Vence em 3 dias</span></td><td>Renovar contrato</td>
+                    </tr>
+                    <tr>
+                        <td>CT-2024-0018</td><td>Amil</td><td>20/06/2024</td>
+                        <td><span class="status-badge orange">Sem reajuste anual</span></td><td>Revisar cláusulas</td>
+                    </tr>
+                    <tr>
+                        <td>CT-2024-0033</td><td>Bradesco Saúde</td><td>28/06/2024</td>
+                        <td><span class="status-badge orange">Aditivo pendente</span></td><td>Acompanhar assinatura</td>
+                    </tr>
+                    <tr>
+                        <td>CT-2024-0042</td><td>SulAmérica</td><td>05/07/2024</td>
+                        <td><span class="status-badge blue">Documento vencendo</span></td><td>Atualizar documento</td>
+                    </tr>
+                    <tr>
+                        <td>CT-2024-0012</td><td>Hapvida</td><td>10/07/2024</td>
+                        <td><span class="status-badge yellow">Cláusula crítica</span></td><td>Revisar cláusula</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </article>
+
+    <article class="panel score-panel reveal">
+        <div class="panel-header"><h2>Score contratual por operadora</h2></div>
+        <div class="score-list">
+            <div class="score-row"><span>Unimed</span><div><i style="width:90%"></i></div><strong>90/100</strong></div>
+            <div class="score-row"><span>Bradesco Saúde</span><div><i style="width:85%"></i></div><strong>85/100</strong></div>
+            <div class="score-row"><span>SulAmérica</span><div><i style="width:80%"></i></div><strong>80/100</strong></div>
+            <div class="score-row"><span>Amil</span><div><i style="width:75%"></i></div><strong>75/100</strong></div>
+            <div class="score-row"><span>Hapvida</span><div><i style="width:70%"></i></div><strong>70/100</strong></div>
+        </div>
+        <div class="score-legend">
+            <span>Excelente (90-100)</span>
+            <span>Bom (70-89)</span>
+            <span>Regular (50-69)</span>
+            <span>Ruim (&lt;50)</span>
+        </div>
+    </article>
 </section>
 {% endblock %}
 
 {% block scripts %}
-<script>
-const metrics = {{ metrics|tojson }};
-
-function chartDefault() {
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { labels: { color: '#cbd5e1', font: { family: 'Manrope' } } }
-        },
-        scales: {
-            x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.12)' } },
-            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.12)' } }
-        }
-    };
-}
-
-new Chart(document.getElementById('statusChart'), {
-    type: 'bar',
-    data: {
-        labels: ['Vigentes', 'A vencer', 'Vencidos'],
-        datasets: [
-            {
-                label: 'Contratos',
-                data: [metrics.status_counts['Vigentes'], metrics.status_counts['A vencer'], metrics.status_counts['Vencidos']],
-                backgroundColor: ['rgba(45,212,191,.55)', 'rgba(251,191,36,.55)', 'rgba(251,113,133,.55)'],
-                borderRadius: 14,
-                maxBarThickness: 54
-            }
-        ]
-    },
-    options: chartDefault()
-});
-
-new Chart(document.getElementById('scoreChart'), {
-    type: 'doughnut',
-    data: {
-        labels: Object.keys(metrics.score_distribution),
-        datasets: [{
-            data: Object.values(metrics.score_distribution),
-            backgroundColor: ['rgba(251,113,133,.8)', 'rgba(251,191,36,.8)', 'rgba(96,165,250,.8)', 'rgba(45,212,191,.8)'],
-            borderWidth: 0
-        }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { family: 'Manrope' } } } } }
-});
-
-new Chart(document.getElementById('operatorsChart'), {
-    type: 'bar',
-    data: {
-        labels: metrics.top_operators.map(item => item.label),
-        datasets: [{
-            label: 'Qtd. contratos',
-            data: metrics.top_operators.map(item => item.count),
-            backgroundColor: 'rgba(96,165,250,.6)',
-            borderRadius: 12
-        }]
-    },
-    options: chartDefault()
-});
-
-new Chart(document.getElementById('tableMixChart'), {
-    type: 'polarArea',
-    data: {
-        labels: metrics.table_mix.map(item => item.label),
-        datasets: [{
-            data: metrics.table_mix.map(item => item.count),
-            backgroundColor: [
-                'rgba(96,165,250,.72)',
-                'rgba(45,212,191,.72)',
-                'rgba(251,191,36,.72)',
-                'rgba(244,114,182,.72)',
-                'rgba(167,139,250,.72)',
-                'rgba(251,113,133,.72)'
-            ],
-            borderWidth: 0
-        }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { family: 'Manrope' } } } } }
-});
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', path='js/dashboard.js') }}" defer></script>
 {% endblock %}

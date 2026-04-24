@@ -1,168 +1,317 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+
 {% block content %}
-<section class="contracts-hero glass-card">
-    <div class="contracts-hero-main">
-        <div>
-            <span class="eyebrow">Workspace contratual</span>
-            <h2>Gestao moderna da carteira de contratos</h2>
-            <p>Visualize score, risco, vigencia e qualidade da extracao em uma leitura executiva, pronta para operacao e revisao.</p>
-        </div>
-        <div class="contracts-hero-actions">
-            <a href="/upload" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Novo contrato</a>
-            <a href="/contracts/export.xlsx" class="btn btn-secondary"><i class="fa-solid fa-file-excel"></i> Exportar carteira</a>
-        </div>
+<header class="topbar contracts-topbar">
+    <div>
+        <h1>Contratos</h1>
+        <p>Gerencie, visualize e analise todos os contratos com operadoras de saúde.</p>
     </div>
+    <div class="topbar-actions">
+        <label class="search-box global-search" aria-label="Busca global">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
+            <input id="globalContractSearch" type="search" placeholder="Buscar contratos, operadoras...">
+            <kbd>Ctrl + K</kbd>
+        </label>
+        <button class="icon-button" type="button" aria-label="Notificações">
+            <span>🔔</span>
+            <b class="floating-badge">3</b>
+        </button>
+        <button class="primary-button compact js-new-contract" type="button">+ Novo contrato</button>
+        <button class="secondary-action" type="button">Importar</button>
+        <button class="secondary-action" type="button">Exportar</button>
+    </div>
+</header>
 
-    <div class="contracts-summary-grid">
-        <article class="summary-tile">
-            <span>Contratos exibidos</span>
-            <strong>{{ summary.total }}</strong>
-            <small>{{ summary.operators }} operadoras na visao atual</small>
-        </article>
-        <article class="summary-tile">
-            <span>Score medio</span>
-            <strong>{{ '%.1f'|format(summary.avg_score) }}</strong>
-            <small>Panorama consolidado da carteira filtrada</small>
-        </article>
-        <article class="summary-tile">
-            <span>A vencer em 90 dias</span>
-            <strong>{{ summary.expiring_90 }}</strong>
-            <small>Contratos que pedem acompanhamento proximo</small>
-        </article>
-        <article class="summary-tile">
-            <span>Risco alto</span>
-            <strong>{{ summary.critical }}</strong>
-            <small>{{ summary.active_filters }} filtros ativos na consulta</small>
-        </article>
-    </div>
+<section class="contracts-metrics">
+    <article class="metric-card reveal">
+        <span class="metric-icon blue">▤</span>
+        <div><p>Total de contratos</p><strong>128</strong><small>Todos os contratos cadastrados</small></div>
+    </article>
+    <article class="metric-card reveal">
+        <span class="metric-icon green">✓</span>
+        <div><p>Contratos ativos</p><strong>102</strong><small>79,7% do total</small></div>
+    </article>
+    <article class="metric-card reveal">
+        <span class="metric-icon orange">◷</span>
+        <div><p>Vencendo em 30 dias</p><strong>15</strong><small>11,7% do total</small></div>
+    </article>
+    <article class="metric-card reveal">
+        <span class="metric-icon red">!</span>
+        <div><p>Vencidos</p><strong>7</strong><small>5,5% do total</small></div>
+    </article>
+    <article class="metric-card reveal">
+        <span class="metric-icon green">◎</span>
+        <div><p>Score médio</p><strong>82/100</strong><small>Muito bom</small></div>
+    </article>
 </section>
 
-<section class="panel glass-card contracts-filter-panel">
-    <div class="panel-head">
-        <div>
-            <h2>Filtros e governanca</h2>
-            <p>Refine a carteira por operadora, status, risco e janela de vigencia.</p>
-        </div>
-        <div class="inline-actions">
-            <a href="/contracts/export.csv" class="btn btn-secondary"><i class="fa-solid fa-file-csv"></i> CSV</a>
-            <a href="/contracts" class="btn btn-secondary"><i class="fa-solid fa-rotate-left"></i> Limpar</a>
-        </div>
+<section class="contracts-layout">
+    <div class="contracts-main">
+        <section class="panel filters-panel reveal">
+            <div class="filters-grid">
+                <label class="filter-field">
+                    <span>Buscar</span>
+                    <input id="tableSearch" type="search" placeholder="Buscar...">
+                </label>
+                <label class="filter-field">
+                    <span>Operadora</span>
+                    <select id="operatorFilter">
+                        <option value="">Todas</option>
+                        <option>Unimed</option>
+                        <option>Amil</option>
+                        <option>Bradesco Saúde</option>
+                        <option>SulAmérica</option>
+                        <option>Hapvida</option>
+                        <option>São Cristóvão</option>
+                        <option>Care Plus</option>
+                        <option>Golden Cross</option>
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Status</span>
+                    <select id="statusFilter">
+                        <option value="">Todos</option>
+                        <option>Ativo</option>
+                        <option>Vencendo</option>
+                        <option>Vencido</option>
+                        <option>Suspenso</option>
+                        <option>Documento pendente</option>
+                        <option>Cláusula crítica</option>
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Vigência</span>
+                    <select id="termFilter">
+                        <option>Todas</option>
+                        <option>Vencendo 30 dias</option>
+                        <option>Vencendo 60 dias</option>
+                        <option>Vencidos</option>
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Tipo de contrato</span>
+                    <select id="typeFilter">
+                        <option>Todos</option>
+                        <option>Prestação de Serviços</option>
+                        <option>Hospitalar</option>
+                        <option>Ambulatorial</option>
+                        <option>SADT</option>
+                        <option>Pacote</option>
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Reajuste</span>
+                    <select id="adjustmentFilter">
+                        <option>Todos</option>
+                        <option>IPCA</option>
+                        <option>IGP-M</option>
+                        <option>Sem índice definido</option>
+                        <option>Pendente</option>
+                    </select>
+                </label>
+                <button class="more-filters" type="button">Mais filtros</button>
+            </div>
+            <div class="applied-filters">
+                <span>Filtros aplicados:</span>
+                <b id="statusBadge">Status: Todos</b>
+                <b id="periodBadge">Período: Todos</b>
+                <button id="clearFilters" type="button">Limpar filtros</button>
+                <label class="sort-field">
+                    <span>Ordenar por:</span>
+                    <select id="sortFilter">
+                        <option>Mais recentes</option>
+                        <option>Mais antigos</option>
+                        <option>Maior score</option>
+                        <option>Menor score</option>
+                        <option>Vencimento próximo</option>
+                    </select>
+                </label>
+            </div>
+        </section>
+
+        <section class="panel contracts-table-panel reveal">
+            <div class="table-wrap contracts-table-wrap">
+                <table class="contracts-table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" aria-label="Selecionar todos"></th>
+                            <th>Contrato</th>
+                            <th>Operadora</th>
+                            <th>Responsável na operadora</th>
+                            <th>Contato</th>
+                            <th>Tipo</th>
+                            <th>Vigência</th>
+                            <th>Reajuste</th>
+                            <th>Status</th>
+                            <th>Score</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contractsRows">
+                        <tr data-contract="CT-2024-0021" data-operator="Unimed" data-status="Ativo" data-score="90">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0021"></td>
+                            <td><strong>CT-2024-0021</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo unimed">U</span><strong>Unimed</strong><small>Unimed São Paulo</small></td>
+                            <td><strong>Carlos Menezes</strong><small>Gerente Comercial</small></td>
+                            <td><span>☎ (11) 98765-4321</span><small>✉ carlos.menezes@unimed.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>15/06/2023</span><small>15/06/2024</small></td>
+                            <td><strong>Anual (Junho)</strong><small>IPCA</small></td>
+                            <td><span class="status-pill active">Ativo</span></td>
+                            <td><span class="score-pill good">90/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0018" data-operator="Amil" data-status="Vencendo" data-score="75">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0018"></td>
+                            <td><strong>CT-2024-0018</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo amil">A</span><strong>Amil</strong><small>Amil Assistência</small></td>
+                            <td><strong>Juliana Prado</strong><small>Gerente de Contas</small></td>
+                            <td><span>☎ (11) 91234-5678</span><small>✉ juliana.prado@amil.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>20/06/2023</span><small>20/06/2024</small></td>
+                            <td><strong>Pendente</strong><small>Sem índice definido</small></td>
+                            <td><span class="status-pill warning">Vencendo</span></td>
+                            <td><span class="score-pill caution">75/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0033" data-operator="Bradesco Saúde" data-status="Ativo" data-score="85">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0033"></td>
+                            <td><strong>CT-2024-0033</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo bradesco">B</span><strong>Bradesco Saúde</strong><small>Bradesco Saúde</small></td>
+                            <td><strong>Ricardo Almeida</strong><small>Executivo de Negócios</small></td>
+                            <td><span>☎ (11) 99876-5432</span><small>✉ ricardo.almeida@bradescosaude.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>28/06/2023</span><small>28/06/2024</small></td>
+                            <td><strong>Anual (Junho)</strong><small>IGP-M</small></td>
+                            <td><span class="status-pill active">Ativo</span></td>
+                            <td><span class="score-pill good">85/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0042" data-operator="SulAmérica" data-status="Documento pendente" data-score="80">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0042"></td>
+                            <td><strong>CT-2024-0042</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo sulamerica">S</span><strong>SulAmérica</strong><small>SulAmérica Saúde</small></td>
+                            <td><strong>Fernanda Lima</strong><small>Analista Comercial</small></td>
+                            <td><span>☎ (11) 95555-1122</span><small>✉ fernanda.lima@sulamerica.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>05/07/2023</span><small>05/07/2024</small></td>
+                            <td><strong>Anual (Julho)</strong><small>IPCA</small></td>
+                            <td><span class="status-pill document">Documento pendente</span></td>
+                            <td><span class="score-pill good">80/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0012" data-operator="Hapvida" data-status="Cláusula crítica" data-score="70">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0012"></td>
+                            <td><strong>CT-2024-0012</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo hapvida">H</span><strong>Hapvida</strong><small>Hapvida Saúde</small></td>
+                            <td><strong>Eduardo Santos</strong><small>Gerente de Relacionamento</small></td>
+                            <td><span>☎ (85) 98888-2233</span><small>✉ eduardo.santos@hapvida.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>10/07/2023</span><small>10/07/2024</small></td>
+                            <td><strong>Anual (Julho)</strong><small>IPCA</small></td>
+                            <td><span class="status-pill critical">Cláusula crítica</span></td>
+                            <td><span class="score-pill caution">70/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0027" data-operator="São Cristóvão" data-status="Ativo" data-score="88">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0027"></td>
+                            <td><strong>CT-2024-0027</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo sao">S</span><strong>São Cristóvão</strong><small>São Cristóvão Saúde</small></td>
+                            <td><strong>Patrícia Rocha</strong><small>Coordenadora Comercial</small></td>
+                            <td><span>☎ (11) 96666-3344</span><small>✉ patricia.rocha@saocristovao.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>18/07/2023</span><small>18/07/2024</small></td>
+                            <td><strong>Anual (Julho)</strong><small>IPCA</small></td>
+                            <td><span class="status-pill active">Ativo</span></td>
+                            <td><span class="score-pill good">88/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0048" data-operator="Care Plus" data-status="Ativo" data-score="84">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0048"></td>
+                            <td><strong>CT-2024-0048</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo care">C</span><strong>Care Plus</strong><small>Care Plus</small></td>
+                            <td><strong>Marcos Vinícius</strong><small>Gerente Comercial</small></td>
+                            <td><span>☎ (11) 97777-4455</span><small>✉ marcos.vinicius@careplus.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>25/07/2023</span><small>25/07/2024</small></td>
+                            <td><strong>Anual (Julho)</strong><small>IGP-M</small></td>
+                            <td><span class="status-pill active">Ativo</span></td>
+                            <td><span class="score-pill good">84/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        <tr data-contract="CT-2024-0030" data-operator="Golden Cross" data-status="Suspenso" data-score="60">
+                            <td><input type="checkbox" aria-label="Selecionar CT-2024-0030"></td>
+                            <td><strong>CT-2024-0030</strong><small>Hospital Santa Clara</small></td>
+                            <td><span class="operator-logo golden">G</span><strong>Golden Cross</strong><small>Golden Cross</small></td>
+                            <td><strong>Renato Oliveira</strong><small>Executivo de Contas</small></td>
+                            <td><span>☎ (21) 93333-5566</span><small>✉ renato.oliveira@goldencross.com.br</small></td>
+                            <td>Prest. de Serviços</td>
+                            <td><span>30/07/2023</span><small>30/07/2024</small></td>
+                            <td><strong>Anual (Julho)</strong><small>IPCA</small></td>
+                            <td><span class="status-pill suspended">Suspenso</span></td>
+                            <td><span class="score-pill low">60/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <footer class="table-footer">
+                <span id="tableCounter">Mostrando 1 a 8 de 128 contratos</span>
+                <nav class="pagination" aria-label="Paginação">
+                    <button type="button">Anterior</button>
+                    <button class="active" type="button">1</button>
+                    <button type="button">2</button>
+                    <button type="button">3</button>
+                    <span>...</span>
+                    <button type="button">16</button>
+                    <button type="button">Próximo</button>
+                </nav>
+                <select aria-label="Itens por página">
+                    <option>8 por página</option>
+                    <option>16 por página</option>
+                    <option>32 por página</option>
+                </select>
+            </footer>
+        </section>
     </div>
 
-    <form method="get" class="filters-grid contracts-filters">
-        <label class="field-group field-search">
-            <span>Busca inteligente</span>
-            <input type="text" name="search" placeholder="Contrato, operadora ou numero" value="{{ filters.search }}">
-        </label>
-        <label class="field-group">
-            <span>Operadora</span>
-            <select name="operator">
-                <option value="">Todas as operadoras</option>
-                {% for op in operators %}
-                <option value="{{ op }}" {% if filters.operator == op %}selected{% endif %}>{{ op }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label class="field-group">
-            <span>Status</span>
-            <select name="status">
-                <option value="">Todos os status</option>
-                <option value="vigente" {% if filters.status == 'vigente' %}selected{% endif %}>Vigente</option>
-                <option value="a_vencer" {% if filters.status == 'a_vencer' %}selected{% endif %}>A vencer</option>
-                <option value="vencido" {% if filters.status == 'vencido' %}selected{% endif %}>Vencido</option>
-                <option value="critico" {% if filters.status == 'critico' %}selected{% endif %}>Critico</option>
-            </select>
-        </label>
-        <label class="field-group">
-            <span>Risco</span>
-            <select name="risk">
-                <option value="">Todos os riscos</option>
-                <option value="baixo" {% if filters.risk == 'baixo' %}selected{% endif %}>Baixo</option>
-                <option value="moderado" {% if filters.risk == 'moderado' %}selected{% endif %}>Moderado</option>
-                <option value="alto" {% if filters.risk == 'alto' %}selected{% endif %}>Alto</option>
-                <option value="muito alto" {% if filters.risk == 'muito alto' %}selected{% endif %}>Muito alto</option>
-            </select>
-        </label>
-        <label class="field-group">
-            <span>Fim de vigencia de</span>
-            <input type="date" name="start_from" value="{{ filters.start_from }}">
-        </label>
-        <label class="field-group">
-            <span>Ate</span>
-            <input type="date" name="end_to" value="{{ filters.end_to }}">
-        </label>
-        <div class="filter-submit">
-            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter"></i> Aplicar filtros</button>
-        </div>
-    </form>
+    <aside class="contracts-aside">
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Resumo por status</h2></div>
+            <div class="chart-area donut contract-status-chart"><canvas id="contractsStatusChart"></canvas></div>
+            <ul class="legend-list" id="contractsStatusLegend"></ul>
+        </article>
+
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Ações rápidas</h2></div>
+            <div class="quick-actions">
+                <button class="js-new-contract" type="button">Novo contrato</button>
+                <button type="button">Registrar aditivo</button>
+                <button type="button">Importar contratos</button>
+                <button type="button">Renovação em massa</button>
+                <button type="button">Gerar relatório</button>
+                <button type="button">Exportar contratos</button>
+            </div>
+        </article>
+
+        <article class="panel reveal">
+            <div class="panel-header">
+                <h2>Principais operadoras</h2>
+                <a href="#">Ver todas as operadoras</a>
+            </div>
+            <ul class="operator-ranking">
+                <li><strong>Unimed</strong><span>32 contratos</span></li>
+                <li><strong>Amil</strong><span>24 contratos</span></li>
+                <li><strong>Bradesco Saúde</strong><span>18 contratos</span></li>
+                <li><strong>SulAmérica</strong><span>16 contratos</span></li>
+                <li><strong>Hapvida</strong><span>14 contratos</span></li>
+            </ul>
+        </article>
+    </aside>
 </section>
+{% endblock %}
 
-<section class="panel glass-card">
-    <div class="panel-head compact">
-        <div>
-            <h2>Carteira contratual</h2>
-            <p>Leitura operacional com score, risco, vigencia e rastreabilidade por contrato.</p>
-        </div>
-    </div>
-
-    <div class="table-wrap margin-top contracts-table-wrap">
-        <table class="modern-table">
-            <thead>
-                <tr>
-                    <th>Operadora</th>
-                    <th>Contrato</th>
-                    <th>Vigencia</th>
-                    <th>Score</th>
-                    <th>Risco</th>
-                    <th>Extracao</th>
-                    <th>Acoes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in contracts %}
-                {% set meta = status_meta(c) %}
-                <tr>
-                    <td>
-                        <div class="table-primary">{{ c.operator_name or 'Nao informada' }}</div>
-                        <div class="table-note">Origem {{ c.original_filename or 'manual' }}</div>
-                    </td>
-                    <td>
-                        <div class="table-primary">{{ c.contract_name or 'Contrato sem nome' }}</div>
-                        <div class="table-note">Numero {{ c.contract_number or 'nao identificado' }}</div>
-                    </td>
-                    <td>
-                        <div class="table-primary">{{ c.start_date or '-' }} ate {{ c.end_date or '-' }}</div>
-                        <div class="contract-date-meta">
-                            <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
-                            <span class="table-note">{{ c.days_until_end_view if c.days_until_end_view is not none else '-' }} dias restantes</span>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="score-cell">
-                            <strong>{{ '%.1f'|format(c.score_total or 0) }}</strong>
-                            <div class="score-inline-track">
-                                <div class="score-inline-fill" style="width: {{ c.score_total or 0 }}%;"></div>
-                            </div>
-                            <span class="table-note">{{ c.classification or 'Sem classificacao' }}</span>
-                        </div>
-                    </td>
-                    <td><span class="pill outline {{ badge_class(c.risk_level) }}">{{ c.risk_level or 'nao classificado' }}</span></td>
-                    <td>
-                        <div class="table-primary">{{ c.extraction_method or 'Nao informado' }}</div>
-                        <div class="table-note">{% if c.extraction_confidence %}Confianca {{ '%.0f'|format(c.extraction_confidence * 100) }}%{% else %}Sem percentual de confianca{% endif %}</div>
-                    </td>
-                    <td>
-                        <div class="inline-actions">
-                            <a class="btn btn-secondary btn-sm" href="/contracts/{{ c.id }}">Abrir</a>
-                            <a class="btn btn-secondary btn-sm" href="/contracts/{{ c.id }}?edit=1">Editar</a>
-                        </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7"><div class="empty-state inline">Nenhum contrato encontrado.</div></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', path='js/contracts.js') }}" defer></script>
 {% endblock %}
