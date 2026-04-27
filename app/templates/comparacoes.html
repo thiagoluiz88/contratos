@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar contracts-topbar comparisons-topbar">
+    <div>
+        <h1>Comparações</h1>
+        <p>Compare contratos e identifique melhores condições, cláusulas e oportunidades de negociação.</p>
+    </div>
+    <div class="topbar-actions">
+        <label class="search-box global-search" aria-label="Busca global em comparações">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
+            <input id="comparisonSearch" type="search" placeholder="Buscar contratos, operadoras, cláusulas...">
+            <kbd>Ctrl + K</kbd>
+        </label>
+        <button class="icon-button" type="button" aria-label="Notificações">
+            <span>!</span>
+            <b class="floating-badge">3</b>
+        </button>
+        <button id="newComparison" class="primary-button compact" type="button">+ Nova comparação</button>
+        <button class="secondary-action" type="button">Histórico de comparações</button>
+    </div>
+</header>
+
+<section class="panel comparison-select-panel reveal">
+    <div class="panel-header">
+        <h2>Selecione os contratos para comparar</h2>
+        <button id="exportComparison" class="secondary-action" type="button">Exportar comparação</button>
+    </div>
+    <div class="comparison-selected-grid" id="selectedContracts"></div>
+</section>
+
+<section class="comparison-tabs reveal" aria-label="Abas de comparação">
+    <button class="active" type="button" data-tab="resumo">Resumo Geral</button>
+    <button type="button" data-tab="clausulas">Cláusulas Comparadas</button>
+    <button type="button" data-tab="reajustes">Reajustes e Índices</button>
+    <button type="button" data-tab="prazos">Prazos e Vigências</button>
+    <button type="button" data-tab="pagamentos">Pagamentos</button>
+    <button type="button" data-tab="multas">Multas e Penalidades</button>
+    <button type="button" data-tab="rescisao">Rescisão</button>
+    <button type="button" data-tab="glosas">Glosas</button>
+    <button type="button" data-tab="beneficios">Benefícios</button>
+</section>
+
+<section class="comparison-layout">
+    <div class="comparison-main">
+        <section class="panel comparison-overview-panel reveal" id="comparisonSummary">
+            <div class="panel-header">
+                <h2>Visão geral da comparação</h2>
+            </div>
+            <div class="table-wrap comparison-table-wrap">
+                <table class="comparison-table">
+                    <thead id="comparisonTableHead"></thead>
+                    <tbody id="comparisonTableBody"></tbody>
+                </table>
+            </div>
+            <div class="comparison-legend">
+                <span><i class="legend-green"></i> verde = Melhor condição</span>
+                <span><i class="legend-orange"></i> laranja = Atenção</span>
+                <span><i class="legend-red"></i> vermelho = Ponto de atenção crítico</span>
+                <span><i class="legend-gray"></i> cinza = Empate</span>
+            </div>
+        </section>
+
+        <section class="panel comparison-tab-placeholder" id="comparisonPlaceholder" hidden>
+            <h2 id="comparisonPlaceholderTitle">Conteúdo da aba em desenvolvimento</h2>
+            <p>Conteúdo da aba em desenvolvimento para esta primeira versão.</p>
+        </section>
+
+        <section class="comparison-highlights reveal" id="comparisonHighlights">
+            <article class="panel comparison-highlight-card" data-search="Melhor contrato geral CT-2024-0033 Bradesco Saúde score condições critérios">
+                <span class="highlight-icon green">♕</span>
+                <strong>Melhor contrato geral</strong>
+                <h3>CT-2024-0033 - Bradesco Saúde</h3>
+                <p>Melhor score geral e melhores condições na maioria dos critérios analisados.</p>
+            </article>
+            <article class="panel comparison-highlight-card" data-search="Melhor segurança jurídica CT-2024-0033 Bradesco Saúde proteção conformidade">
+                <span class="highlight-icon blue">◆</span>
+                <strong>Melhor segurança jurídica</strong>
+                <h3>CT-2024-0033 - Bradesco Saúde</h3>
+                <p>Melhores cláusulas de proteção jurídica e conformidade legal.</p>
+            </article>
+            <article class="panel comparison-highlight-card" data-search="Melhor prazo de pagamento CT-2024-0033 Bradesco Saúde 28 dias">
+                <span class="highlight-icon orange">$</span>
+                <strong>Melhor prazo de pagamento</strong>
+                <h3>CT-2024-0033 - Bradesco Saúde</h3>
+                <p>Menor prazo médio de pagamento: 28 dias.</p>
+            </article>
+            <article class="panel comparison-highlight-card" data-search="Atenção necessária CT-2024-0018 Amil Assistência cláusulas críticas índice reajuste">
+                <span class="highlight-icon red">!</span>
+                <strong>Atenção necessária</strong>
+                <h3>CT-2024-0018 - Amil Assistência</h3>
+                <p>Maior número de cláusulas críticas e índice de reajuste não definido.</p>
+            </article>
+        </section>
+
+        <footer class="comparison-disclaimer reveal">
+            Esta comparação foi gerada com base na análise de 23 critérios contratuais. Recomendamos sempre a validação jurídica das informações antes de tomar decisões.
+        </footer>
+    </div>
+
+    <aside class="comparison-aside">
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Ranking dos contratos</h2></div>
+            <ol class="comparison-ranking" id="comparisonRanking"></ol>
+        </article>
+
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Comparativo de scores</h2></div>
+            <div class="chart-area comparison-score-chart">
+                <canvas id="comparisonScoreChart"></canvas>
+            </div>
+        </article>
+
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Principais diferenças encontradas</h2></div>
+            <ul class="comparison-differences">
+                <li data-search="Melhor proteção financeira CT-2024-0033 proteção financeira hospital"><strong>Melhor proteção financeira</strong><small>CT-2024-0033 oferece melhores condições de proteção financeira ao hospital.</small></li>
+                <li data-search="Prazo de pagamento CT-2024-0033 28 dias"><strong>Prazo de pagamento</strong><small>CT-2024-0033 possui o melhor prazo médio de pagamento: 28 dias.</small></li>
+                <li data-search="Reajuste anual CT-2024-0018 índice definido reajuste"><strong>Reajuste anual</strong><small>CT-2024-0018 não possui índice definido de reajuste.</small></li>
+                <li data-search="Mais cláusulas críticas CT-2024-0018 12"><strong>Mais cláusulas críticas</strong><small>CT-2024-0018 possui o maior número de cláusulas críticas identificadas (12).</small></li>
+            </ul>
+            <a class="comparison-link" href="#">Ver análise detalhada completa</a>
+        </article>
+    </aside>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', path='js/comparacoes.js') }}" defer></script>
+{% endblock %}

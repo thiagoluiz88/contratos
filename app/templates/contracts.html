@@ -309,6 +309,38 @@
         </article>
     </aside>
 </section>
+
+<div class="contract-import-modal" id="contractImportModal" aria-hidden="true">
+    <div class="contract-import-card" role="dialog" aria-modal="true" aria-labelledby="contractImportTitle">
+        <button class="contract-import-close" id="closeContractImport" type="button" aria-label="Fechar">×</button>
+        <div class="contract-import-header">
+            <span class="metric-icon green">□</span>
+            <div>
+                <h2 id="contractImportTitle">Novo contrato</h2>
+                <p>Adicione ou importe arquivos PDF, DOCX, DOC, TXT, MD e PDFs digitalizados com OCR.</p>
+            </div>
+        </div>
+
+        <form id="contractImportForm" class="contract-import-form">
+            <label class="contract-dropzone" id="contractDropzone" for="contractFileInput">
+                <input id="contractFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md" hidden>
+                <span>⇧</span>
+                <strong>Arraste o arquivo do contrato aqui ou clique para selecionar</strong>
+                <small>Formatos: PDF, DOCX, DOC, TXT, MD. PDFs sem texto serão enviados para OCR.</small>
+            </label>
+            <div class="contract-import-file" id="contractImportFile">Nenhum arquivo selecionado</div>
+            <div class="contract-import-progress" id="contractImportProgress" aria-hidden="true">
+                <span><b id="contractImportProgressBar"></b></span>
+                <small id="contractImportProgressText">Importando contrato...</small>
+            </div>
+            <div class="contract-import-message" id="contractImportMessage" role="status"></div>
+            <div class="contract-import-actions">
+                <button class="secondary-action" id="cancelContractImport" type="button">Cancelar</button>
+                <button class="primary-button compact" id="submitContractImport" type="submit">Importar contrato</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

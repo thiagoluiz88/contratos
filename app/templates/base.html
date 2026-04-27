@@ -28,9 +28,9 @@
             <nav class="side-nav">
                 <a class="nav-item {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard"><span>▣</span>Painel Executivo</a>
                 <a class="nav-item {% if active_page == 'contracts' %}active{% endif %}" href="/contracts"><span>▤</span>Contratos</a>
-                <a class="nav-item" href="#"><span>✚</span>Aditivos</a>
-                <a class="nav-item" href="#"><span>✦</span>Análises por IA</a>
-                <a class="nav-item" href="#"><span>⇄</span>Comparações</a>
+                <a class="nav-item {% if active_page == 'aditivos' %}active{% endif %}" href="/aditivos"><span>✚</span>Aditivos</a>
+                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>✦</span>Análises por IA</a>
+                <a class="nav-item {% if active_page == 'comparacoes' %}active{% endif %}" href="/comparacoes"><span>⇄</span>Comparações</a>
                 <a class="nav-item" href="#"><span>!</span>Alertas <b class="badge danger">12</b></a>
                 <a class="nav-item" href="#"><span>▥</span>Relatórios</a>
                 <a class="nav-item" href="#"><span>↧</span>Exportações</a>

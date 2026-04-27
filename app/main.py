@@ -1,8 +1,17 @@
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import OperationalError
 from starlette.middleware.sessions import SessionMiddleware
+
+from .database import SessionLocal, init_db
+from .models import Contract, ContractFile, ImportBatch, Operator
+from .services.contract_parser import parse_contract
+from .services.file_text import TextExtractionError, extract_text_from_file
 
 
 APP_USER = "admin"
@@ -28,6 +37,16 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
+UPLOAD_DIR = Path("uploads/contracts")
+SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
+
+
+@app.on_event("startup")
+def on_startup():
+    try:
+        init_db()
+    except OperationalError as exc:
+        print(f"Aviso: não foi possível inicializar o banco automaticamente: {exc}")
 
 
 def is_logged_in(request: Request) -> bool:
@@ -205,6 +224,241 @@ def contracts(request: Request):
         {
             "title": "Contratos",
             "active_page": "contracts",
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.post("/contracts/import")
+async def import_contract(request: Request, file: UploadFile = File(...)):
+    if redirect := require_login(request):
+        return redirect
+
+    original_filename = file.filename or "contrato"
+    extension = Path(original_filename).suffix.lower()
+    if extension not in SUPPORTED_CONTRACT_EXTENSIONS:
+        return JSONResponse(
+            {
+                "error": "Formato não suportado. Envie PDF, DOCX, DOC, TXT ou MD.",
+            },
+            status_code=400,
+        )
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{uuid4().hex}{extension}"
+    stored_path = UPLOAD_DIR / stored_name
+    file_size = 0
+
+    with stored_path.open("wb") as destination:
+        while chunk := await file.read(1024 * 1024):
+            file_size += len(chunk)
+            destination.write(chunk)
+
+    extraction_status = "completed"
+    extraction_method = None
+    extraction_confidence = None
+    raw_text = None
+    warning = None
+
+    if extension == ".doc":
+        extraction_status = "pending"
+        warning = "Arquivo DOC salvo. Extração automática de DOC legado não está disponível; converta para DOCX/PDF para análise completa."
+    else:
+        try:
+            extraction = extract_text_from_file(stored_path)
+            raw_text = extraction.get("text")
+            extraction_method = extraction.get("method")
+            extraction_confidence = extraction.get("confidence")
+        except TextExtractionError as exc:
+            extraction_status = "failed"
+            warning = str(exc)
+
+    parsed = parse_contract(raw_text or "", original_filename) if raw_text else {
+        "contract_name": Path(original_filename).stem,
+        "operator_name": None,
+        "contract_number": None,
+        "raw_text": raw_text,
+    }
+
+    db = SessionLocal()
+    try:
+        operator = None
+        operator_name = parsed.get("operator_name")
+        if operator_name:
+            operator = db.query(Operator).filter(Operator.name == operator_name).first()
+            if not operator:
+                operator = Operator(name=operator_name)
+                db.add(operator)
+                db.flush()
+
+        batch = ImportBatch(
+            source_type="upload",
+            original_filename=original_filename,
+            stored_filepath=str(stored_path),
+            status="completed" if extraction_status != "failed" else "completed_with_warnings",
+            total_records=1,
+            imported_records=1,
+            failed_records=0 if extraction_status != "failed" else 1,
+            notes=warning,
+            created_by=request.session.get("user", {}).get("username"),
+        )
+        db.add(batch)
+        db.flush()
+
+        contract = Contract(
+            operator_id=operator.id if operator else None,
+            import_batch_id=batch.id,
+            contract_name=parsed.get("contract_name") or Path(original_filename).stem,
+            operator_name=operator_name,
+            contract_number=parsed.get("contract_number"),
+            contract_object=parsed.get("contract_object"),
+            signature_date=parsed.get("signature_date"),
+            start_date=parsed.get("start_date"),
+            end_date=parsed.get("end_date"),
+            auto_renewal=parsed.get("auto_renewal", False),
+            renewal_details=parsed.get("renewal_details"),
+            termination_notice_days=parsed.get("termination_notice_days"),
+            payment_term_days=parsed.get("payment_term_days"),
+            payment_trigger=parsed.get("payment_trigger"),
+            payment_interest_clause=parsed.get("payment_interest_clause", False),
+            payment_penalty_clause=parsed.get("payment_penalty_clause", False),
+            billing_deadline_days=parsed.get("billing_deadline_days"),
+            billing_deadline_description=parsed.get("billing_deadline_description"),
+            allows_glosa_unilateral=parsed.get("allows_glosa_unilateral", False),
+            glosa_deadline_days=parsed.get("glosa_deadline_days"),
+            glosa_appeal_deadline_days=parsed.get("glosa_appeal_deadline_days"),
+            glosa_response_deadline_days=parsed.get("glosa_response_deadline_days"),
+            glosa_clause_summary=parsed.get("glosa_clause_summary"),
+            reajust_clause_exists=parsed.get("reajust_clause_exists", False),
+            reajust_frequency=parsed.get("reajust_frequency"),
+            reajust_index=parsed.get("reajust_index"),
+            reajust_clause_summary=parsed.get("reajust_clause_summary"),
+            medical_fee_table=parsed.get("medical_fee_table"),
+            medical_fee_table_version=parsed.get("medical_fee_table_version"),
+            daily_rate_table=parsed.get("daily_rate_table"),
+            materials_table=parsed.get("materials_table"),
+            materials_table_version=parsed.get("materials_table_version"),
+            medicines_table=parsed.get("medicines_table"),
+            medicines_table_version=parsed.get("medicines_table_version"),
+            raw_text=raw_text,
+            extraction_method=extraction_method,
+            extraction_confidence=extraction_confidence,
+            original_filename=original_filename,
+            stored_filepath=str(stored_path),
+        )
+        db.add(contract)
+        db.flush()
+
+        contract_file = ContractFile(
+            contract_id=contract.id,
+            import_batch_id=batch.id,
+            file_type="contract",
+            original_filename=original_filename,
+            stored_filepath=str(stored_path),
+            mime_type=file.content_type,
+            file_size_bytes=file_size,
+            extracted_text=raw_text,
+            extraction_status=extraction_status,
+            extraction_method=extraction_method,
+            uploaded_by=request.session.get("user", {}).get("username"),
+        )
+        db.add(contract_file)
+        db.commit()
+        db.refresh(contract)
+
+        return JSONResponse(
+            {
+                "id": contract.id,
+                "contract_name": contract.contract_name,
+                "contract_number": contract.contract_number,
+                "operator_name": contract.operator_name,
+                "filename": original_filename,
+                "stored_filepath": str(stored_path),
+                "extraction_status": extraction_status,
+                "extraction_method": extraction_method,
+                "extraction_confidence": extraction_confidence,
+                "warning": warning,
+            }
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@app.get("/aditivos", response_class=HTMLResponse)
+def aditivos(request: Request):
+    if redirect := require_login(request):
+        return redirect
+
+    return templates.TemplateResponse(
+        request,
+        "aditivos.html",
+        {
+            "title": "Aditivos",
+            "active_page": "aditivos",
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.get("/analises-ia", response_class=HTMLResponse)
+def analises_ia(request: Request):
+    if redirect := require_login(request):
+        return redirect
+
+    return templates.TemplateResponse(
+        request,
+        "analises_ia.html",
+        {
+            "title": "Análises por IA",
+            "active_page": "analises_ia",
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.post("/analises-ia/upload")
+async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
+    if redirect := require_login(request):
+        return redirect
+
+    return JSONResponse(
+        {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "status": "received",
+        }
+    )
+
+
+@app.post("/analises-ia/run")
+def analises_ia_run(request: Request):
+    if redirect := require_login(request):
+        return redirect
+
+    return JSONResponse(
+        {
+            "score": 62,
+            "falhas": 14,
+            "clausulas_criticas": 8,
+            "oportunidades": 6,
+        }
+    )
+
+
+@app.get("/comparacoes", response_class=HTMLResponse)
+def comparacoes(request: Request):
+    if redirect := require_login(request):
+        return redirect
+
+    return templates.TemplateResponse(
+        request,
+        "comparacoes.html",
+        {
+            "title": "Comparações",
+            "active_page": "comparacoes",
             "user": request.session.get("user"),
         },
     )

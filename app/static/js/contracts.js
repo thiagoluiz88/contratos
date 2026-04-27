@@ -166,7 +166,7 @@ function setupContractsFilters() {
 function setupContractActions() {
     document.querySelectorAll(".js-new-contract").forEach((button) => {
         button.addEventListener("click", () => {
-            alert("Fluxo de novo contrato pronto para conectar em /contracts/new.");
+            openContractImportModal();
         });
     });
 
@@ -184,9 +184,138 @@ function setupContractActions() {
     });
 }
 
+function openContractImportModal() {
+    const modal = document.getElementById("contractImportModal");
+    modal?.classList.add("is-open");
+    modal?.setAttribute("aria-hidden", "false");
+}
+
+function closeContractImportModal() {
+    const modal = document.getElementById("contractImportModal");
+    modal?.classList.remove("is-open");
+    modal?.setAttribute("aria-hidden", "true");
+}
+
+function setupContractImport() {
+    const modal = document.getElementById("contractImportModal");
+    const form = document.getElementById("contractImportForm");
+    const dropzone = document.getElementById("contractDropzone");
+    const input = document.getElementById("contractFileInput");
+    const fileLabel = document.getElementById("contractImportFile");
+    const message = document.getElementById("contractImportMessage");
+    const progress = document.getElementById("contractImportProgress");
+    const progressBar = document.getElementById("contractImportProgressBar");
+    const progressText = document.getElementById("contractImportProgressText");
+    const submit = document.getElementById("submitContractImport");
+    const close = document.getElementById("closeContractImport");
+    const cancel = document.getElementById("cancelContractImport");
+    const allowedExtensions = [".pdf", ".docx", ".doc", ".txt", ".md"];
+
+    const setMessage = (text, type = "") => {
+        if (!message) return;
+        message.textContent = text;
+        message.className = `contract-import-message ${type}`;
+    };
+
+    const setFile = (file) => {
+        if (!file) return;
+        const extension = `.${file.name.split(".").pop().toLowerCase()}`;
+        if (!allowedExtensions.includes(extension)) {
+            if (input) input.value = "";
+            if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
+            setMessage("Formato não suportado. Envie PDF, DOCX, DOC, TXT ou MD.", "error");
+            return;
+        }
+        if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;
+        setMessage(extension === ".doc"
+            ? "DOC legado será salvo; para extração automática completa, prefira DOCX ou PDF."
+            : "Arquivo pronto para importação.", "success");
+    };
+
+    input?.addEventListener("change", () => setFile(input.files?.[0]));
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+        dropzone?.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.add("is-dragging");
+        });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+        dropzone?.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.remove("is-dragging");
+        });
+    });
+
+    dropzone?.addEventListener("drop", (event) => {
+        const file = event.dataTransfer?.files?.[0];
+        if (!file || !input) return;
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+        setFile(file);
+    });
+
+    [close, cancel].forEach((button) => {
+        button?.addEventListener("click", closeContractImportModal);
+    });
+
+    modal?.addEventListener("click", (event) => {
+        if (event.target === modal) closeContractImportModal();
+    });
+
+    form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = input?.files?.[0];
+        if (!file) {
+            setMessage("Selecione um arquivo antes de importar.", "error");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        if (submit) submit.disabled = true;
+        progress?.classList.add("is-visible");
+        if (progressBar) progressBar.style.width = "35%";
+        if (progressText) progressText.textContent = "Salvando arquivo e extraindo texto...";
+        setMessage("");
+
+        try {
+            const response = await fetch("/contracts/import", {
+                method: "POST",
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Não foi possível importar o contrato.");
+            }
+            if (progressBar) progressBar.style.width = "100%";
+            if (progressText) progressText.textContent = "Importação concluída.";
+            setMessage(
+                data.warning
+                    ? `Contrato importado com aviso: ${data.warning}`
+                    : `Contrato importado: ${data.contract_name}`,
+                data.warning ? "warning" : "success",
+            );
+            window.setTimeout(() => {
+                closeContractImportModal();
+                window.location.reload();
+            }, 1200);
+        } catch (error) {
+            if (progressBar) progressBar.style.width = "0";
+            if (progressText) progressText.textContent = "Importação interrompida.";
+            setMessage(error.message, "error");
+        } finally {
+            if (submit) submit.disabled = false;
+        }
+    });
+}
+
 window.addEventListener("DOMContentLoaded", () => {
     setupContractsFilters();
     setupContractActions();
+    setupContractImport();
 });
 
 window.addEventListener("load", renderStatusChart);

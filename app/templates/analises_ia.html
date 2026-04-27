@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar contracts-topbar ai-topbar">
+    <div>
+        <h1>Análises por IA</h1>
+        <p>A inteligência artificial analisa seus contratos e identifica riscos, falhas e oportunidades.</p>
+    </div>
+    <div class="topbar-actions">
+        <label class="search-box global-search" aria-label="Busca global em análises por IA">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
+            <input id="aiGlobalSearch" type="search" placeholder="Buscar contratos, cláusulas, termos...">
+            <kbd>Ctrl + K</kbd>
+        </label>
+        <button class="icon-button" type="button" aria-label="Notificações">
+            <span>!</span>
+            <b class="floating-badge">3</b>
+        </button>
+        <button class="primary-button compact js-new-analysis" type="button">+ Nova análise</button>
+        <button class="secondary-action" type="button">Histórico de análises</button>
+        <button class="secondary-action" type="button">Configurar IA</button>
+    </div>
+</header>
+
+<section class="panel ai-contract-card reveal">
+    <div class="ai-contract-icon">□</div>
+    <div class="ai-contract-main">
+        <span>Contrato</span>
+        <strong>CT-2024-0021</strong>
+        <small>Operadora: Unimed São Paulo</small>
+    </div>
+    <span class="status-pill active">Ativo</span>
+    <div class="ai-contract-meta">
+        <span>Vigência</span>
+        <strong>15/06/2023 a 15/06/2024</strong>
+    </div>
+    <div class="ai-contract-meta">
+        <span>Tipo</span>
+        <strong>Prestação de Serviços</strong>
+    </div>
+    <div class="ai-contract-meta">
+        <span>Última análise</span>
+        <strong>12/06/2024 09:15</strong>
+    </div>
+    <button id="changeContract" class="secondary-action" type="button">Alterar contrato</button>
+</section>
+
+<section class="panel ai-upload-panel reveal">
+    <div class="ai-upload-area" id="aiDropzone" role="button" tabindex="0" aria-label="Selecionar arquivo do contrato">
+        <input id="aiFileInput" type="file" accept=".pdf,.docx,.doc" hidden>
+        <span class="ai-upload-icon">⇧</span>
+        <strong>Arraste e solte o arquivo do contrato aqui ou clique para selecionar</strong>
+        <small>Formatos suportados: PDF, DOCX, DOC • Tamanho máximo: 50MB</small>
+    </div>
+    <div class="ai-current-file">
+        <span>Arquivo atual: <strong id="aiFileName">Contrato_Unimed_CT-2024-0021.pdf</strong></span>
+        <button id="replaceFile" type="button">Substituir arquivo</button>
+    </div>
+    <aside class="ai-run-box">
+        <button id="runAiAnalysis" class="primary-button ai-run-button" type="button">Analisar com IA</button>
+        <small>Análise completa (2-3 min)</small>
+        <div class="ai-progress" id="aiProgress" aria-hidden="true">
+            <span><b id="aiProgressBar"></b></span>
+            <small id="aiProgressText">Analisando contrato... 0%</small>
+        </div>
+    </aside>
+</section>
+
+<section class="ai-tabs reveal" aria-label="Resultados da análise">
+    <button class="active" type="button" data-tab="executivo">Resumo Executivo</button>
+    <button type="button" data-tab="falhas">Falhas Contratuais</button>
+    <button type="button" data-tab="clausulas">Cláusulas Críticas</button>
+    <button type="button" data-tab="oportunidades">Oportunidades</button>
+    <button type="button" data-tab="mercado">Comparativo de Mercado</button>
+    <button type="button" data-tab="documento">Documento Analisado</button>
+</section>
+
+<section class="ai-results-layout">
+    <div class="ai-main-column">
+        <section class="panel ai-tab-panel active reveal" data-panel="executivo">
+            <div class="panel-header ai-section-header">
+                <div>
+                    <h2>Resumo da análise</h2>
+                    <p>Análise realizada em 12/06/2024 às 09:15</p>
+                </div>
+            </div>
+            <div class="ai-kpi-grid" id="aiKpiGrid">
+                <article class="ai-kpi-card">
+                    <div class="ai-score-ring"><span>62</span><small>/100</small></div>
+                    <strong>Score do contrato</strong>
+                    <p>Risco médio-alto</p>
+                    <small>Contratos similares: 71/100</small>
+                </article>
+                <article class="ai-kpi-card">
+                    <b>14</b>
+                    <strong>Falhas identificadas</strong>
+                    <p>Falhas contratuais</p>
+                    <small>Impacto: Alto</small>
+                </article>
+                <article class="ai-kpi-card">
+                    <b>8</b>
+                    <strong>Cláusulas críticas</strong>
+                    <p>Cláusulas críticas</p>
+                    <small>Revisão recomendada</small>
+                </article>
+                <article class="ai-kpi-card">
+                    <b>6</b>
+                    <strong>Oportunidades</strong>
+                    <p>Melhorias possíveis</p>
+                    <small>Impacto potencial: Alto</small>
+                </article>
+                <article class="ai-kpi-card">
+                    <b>78%</b>
+                    <strong>Conformidade</strong>
+                    <p>Conformidade legal</p>
+                    <small>LGPD: Atende</small>
+                </article>
+            </div>
+        </section>
+
+        <section class="ai-content-grid">
+            <article class="panel ai-failures-panel reveal ai-searchable">
+                <div class="panel-header ai-section-header">
+                    <div>
+                        <h2>Principais falhas contratuais identificadas</h2>
+                        <p>Ordenadas por nível de risco e impacto</p>
+                    </div>
+                </div>
+                <div class="ai-failure-list">
+                    <div class="ai-failure-row" data-search="Reajuste anual não definido índice metodologia cláusula 8.1 crítico alto">
+                        <div><strong>Reajuste anual não definido</strong><small>Não há definição clara do índice ou metodologia de reajuste anual.</small></div>
+                        <span class="risk-pill critical">Crítico</span>
+                        <span>Alto</span>
+                        <span>Cláusula 8.1</span>
+                        <button class="js-ai-detail" type="button">Ver detalhes</button>
+                    </div>
+                    <div class="ai-failure-row" data-search="Rescisão unilateral favorece operadora cláusula 15.2 alto">
+                        <div><strong>Rescisão unilateral favorece a operadora</strong><small>Permite rescisão unilateral pela operadora sem penalidades.</small></div>
+                        <span class="risk-pill high">Alto</span>
+                        <span>Alto</span>
+                        <span>Cláusula 15.2</span>
+                        <button class="js-ai-detail" type="button">Ver detalhes</button>
+                    </div>
+                    <div class="ai-failure-row" data-search="Multas desproporcionais hospital cláusula 16.1 penalidades alto médio">
+                        <div><strong>Multas desproporcionais ao hospital</strong><small>Multas aplicadas ao hospital são excessivas e desproporcionais.</small></div>
+                        <span class="risk-pill high">Alto</span>
+                        <span>Médio</span>
+                        <span>Cláusula 16.1</span>
+                        <button class="js-ai-detail" type="button">Ver detalhes</button>
+                    </div>
+                    <div class="ai-failure-row" data-search="Prazo de pagamento acima do mercado cláusula 10.3 médio">
+                        <div><strong>Prazo de pagamento acima do mercado</strong><small>Prazo de pagamento superior ao praticado pelo mercado.</small></div>
+                        <span class="risk-pill medium">Médio</span>
+                        <span>Médio</span>
+                        <span>Cláusula 10.3</span>
+                        <button class="js-ai-detail" type="button">Ver detalhes</button>
+                    </div>
+                    <div class="ai-failure-row" data-search="Falta de definição de glosas critérios cláusula 11.4 médio">
+                        <div><strong>Falta de definição de glosas</strong><small>Critérios de glosas não estão claramente definidos.</small></div>
+                        <span class="risk-pill medium">Médio</span>
+                        <span>Médio</span>
+                        <span>Cláusula 11.4</span>
+                        <button class="js-ai-detail" type="button">Ver detalhes</button>
+                    </div>
+                </div>
+                <a class="ai-card-link" href="#">Ver todas as 14 falhas identificadas</a>
+            </article>
+
+            <article class="panel ai-critical-panel reveal ai-searchable">
+                <div class="panel-header ai-section-header">
+                    <div>
+                        <h2>Cláusulas mais críticas</h2>
+                        <p>Requerem atenção imediata</p>
+                    </div>
+                </div>
+                <ul class="ai-critical-list">
+                    <li data-search="Cláusula 8.1 Reajuste Ausência de índice definido crítico"><span><strong>Cláusula 8.1 - Reajuste</strong><small>Ausência de índice definido</small></span><b class="risk-pill critical">Crítico</b></li>
+                    <li data-search="Cláusula 15.2 Rescisão unilateral favorece operadora alto"><span><strong>Cláusula 15.2 - Rescisão</strong><small>Rescisão unilateral favorece operadora</small></span><b class="risk-pill high">Alto</b></li>
+                    <li data-search="Cláusula 16.1 Penalidades Multas desproporcionais alto"><span><strong>Cláusula 16.1 - Penalidades</strong><small>Multas desproporcionais</small></span><b class="risk-pill high">Alto</b></li>
+                    <li data-search="Cláusula 10.3 Pagamento Prazo acima do mercado médio"><span><strong>Cláusula 10.3 - Pagamento</strong><small>Prazo acima do mercado</small></span><b class="risk-pill medium">Médio</b></li>
+                    <li data-search="Cláusula 11.4 Glosas Critérios não definidos médio"><span><strong>Cláusula 11.4 - Glosas</strong><small>Critérios não definidos</small></span><b class="risk-pill medium">Médio</b></li>
+                </ul>
+                <a class="ai-card-link" href="#">Ver todas as cláusulas críticas</a>
+            </article>
+        </section>
+
+        <section class="panel ai-tab-panel" data-panel="falhas">
+            <h2>Falhas Contratuais</h2>
+            <p>Foram encontradas 14 falhas relacionadas a reajuste, rescisão, penalidades, glosas e prazos operacionais contra o hospital.</p>
+        </section>
+        <section class="panel ai-tab-panel" data-panel="clausulas">
+            <h2>Cláusulas Críticas</h2>
+            <p>As cláusulas 8.1, 15.2 e 16.1 exigem revisão imediata antes da próxima rodada de negociação.</p>
+        </section>
+        <section class="panel ai-tab-panel" data-panel="oportunidades">
+            <h2>Oportunidades</h2>
+            <p>Há 6 oportunidades de renegociação em reajuste anual, glosas, prazos de pagamento e penalidades.</p>
+        </section>
+        <section class="panel ai-tab-panel" data-panel="mercado">
+            <h2>Comparativo de Mercado</h2>
+            <p>O contrato está abaixo da média de contratos similares em equilíbrio contratual e proteção financeira.</p>
+        </section>
+        <section class="panel ai-tab-panel" data-panel="documento">
+            <h2>Documento Analisado</h2>
+            <p>Arquivo atual: Contrato_Unimed_CT-2024-0021.pdf. Substitua o arquivo para iniciar uma nova leitura.</p>
+        </section>
+    </div>
+
+    <aside class="ai-side-column">
+        <article class="panel reveal">
+            <div class="panel-header ai-section-header">
+                <div>
+                    <h2>Score detalhado por dimensão</h2>
+                    <p>Avaliação completa do contrato</p>
+                </div>
+            </div>
+            <div class="ai-score-bars">
+                <div><span>Equilíbrio contratual <b>45/100</b></span><i><em style="width:45%"></em></i></div>
+                <div><span>Segurança jurídica <b>70/100</b></span><i><em style="width:70%"></em></i></div>
+                <div><span>Clareza e objetividade <b>80/100</b></span><i><em style="width:80%"></em></i></div>
+                <div><span>Proteção financeira <b>50/100</b></span><i><em style="width:50%"></em></i></div>
+                <div><span>Conformidade legal <b>78/100</b></span><i><em style="width:78%"></em></i></div>
+            </div>
+        </article>
+
+        <article class="panel reveal">
+            <div class="panel-header ai-section-header">
+                <div>
+                    <h2>Recomendação da IA</h2>
+                    <p>Baseado na análise completa</p>
+                </div>
+            </div>
+            <div class="ai-recommendation">
+                Recomendamos revisar as cláusulas identificadas como críticas e negociar melhores condições nas cláusulas de reajuste, rescisão e penalidades.
+            </div>
+            <button id="openActionPlan" class="secondary-action ai-full-button" type="button">Ver plano de ação</button>
+        </article>
+
+        <article class="panel reveal ai-searchable">
+            <div class="panel-header"><h2>Próximos passos sugeridos</h2></div>
+            <ol class="ai-next-steps">
+                <li data-search="Revisar cláusulas críticas Prioridade alta"><strong>Revisar cláusulas críticas</strong><small>Prioridade alta</small></li>
+                <li data-search="Negociar reajuste anual Prioridade alta"><strong>Negociar reajuste anual</strong><small>Prioridade alta</small></li>
+                <li data-search="Ajustar multas e penalidades Prioridade média"><strong>Ajustar multas e penalidades</strong><small>Prioridade média</small></li>
+                <li data-search="Definir critérios de glosas Prioridade média"><strong>Definir critérios de glosas</strong><small>Prioridade média</small></li>
+            </ol>
+            <a class="ai-card-link" href="#">Ver todas as recomendações</a>
+        </article>
+    </aside>
+</section>
+
+<footer class="ai-disclaimer reveal">
+    Esta análise foi gerada por inteligência artificial com base no documento fornecido. Recomendamos sempre a validação jurídica das informações.
+</footer>
+
+<div class="ai-modal" id="aiModal" aria-hidden="true">
+    <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
+        <button id="closeAiModal" class="ai-modal-close" type="button" aria-label="Fechar">×</button>
+        <h2 id="aiModalTitle">Detalhes da análise</h2>
+        <p id="aiModalText">Revise a cláusula selecionada com o jurídico e prepare contraproposta para a operadora.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='js/analises_ia.js') }}" defer></script>
+{% endblock %}
