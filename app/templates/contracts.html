@@ -25,7 +25,7 @@
 <section class="contracts-metrics">
     <article class="metric-card reveal">
         <span class="metric-icon blue">▤</span>
-        <div><p>Total de contratos</p><strong>128</strong><small>Todos os contratos cadastrados</small></div>
+        <div><p>Total de contratos</p><strong>{{ contract_count or 0 }}</strong><small>Todos os contratos cadastrados</small></div>
     </article>
     <article class="metric-card reveal">
         <span class="metric-icon green">✓</span>
@@ -148,6 +148,21 @@
                         </tr>
                     </thead>
                     <tbody id="contractsRows">
+                        {% for contract in contract_rows %}
+                        <tr data-contract-id="{{ contract.id }}" data-contract="{{ contract.contract_number }}" data-operator="{{ contract.operator_name }}" data-status="{{ contract.status_label }}" data-score="{{ contract.score }}">
+                            <td><input type="checkbox" aria-label="Selecionar {{ contract.contract_number }}"></td>
+                            <td><strong>{{ contract.contract_number }}</strong><small>{{ contract.contract_name }}</small></td>
+                            <td><span class="operator-logo {{ contract.operator_logo_class }}">{{ contract.operator_initial }}</span><strong>{{ contract.operator_name }}</strong><small>{{ contract.original_filename }}</small></td>
+                            <td><strong>{{ contract.responsible_name }}</strong><small>Cadastro adicional</small></td>
+                            <td><span>{{ contract.contact_info }}</span><small>Cadastro adicional</small></td>
+                            <td>Importado</td>
+                            <td><span>{{ contract.start_date }}</span><small>{{ contract.end_date }}</small></td>
+                            <td><strong>{{ contract.reajust_index }}</strong><small>Extraído do contrato</small></td>
+                            <td><span class="status-pill {{ contract.status_class }}">{{ contract.status_label }}</span></td>
+                            <td><span class="score-pill {{ contract.score_class }}">{{ contract.score }}/100</span></td>
+                            <td class="row-actions"><button data-action="view">◉</button><button data-action="edit">✎</button><button data-action="more">⋯</button></td>
+                        </tr>
+                        {% endfor %}
                         <tr data-contract="CT-2024-0021" data-operator="Unimed" data-status="Ativo" data-score="90">
                             <td><input type="checkbox" aria-label="Selecionar CT-2024-0021"></td>
                             <td><strong>CT-2024-0021</strong><small>Hospital Santa Clara</small></td>
@@ -256,7 +271,7 @@
                 </table>
             </div>
             <footer class="table-footer">
-                <span id="tableCounter">Mostrando 1 a 8 de 128 contratos</span>
+                <span id="tableCounter">Mostrando {{ 1 if contract_rows else 0 }} a {{ contract_count or 0 }} de {{ contract_count or 0 }} contratos</span>
                 <nav class="pagination" aria-label="Paginação">
                     <button type="button">Anterior</button>
                     <button class="active" type="button">1</button>
@@ -322,6 +337,15 @@
         </div>
 
         <form id="contractImportForm" class="contract-import-form">
+            <label class="contract-import-field" for="contractOperatorSelect">
+                <span>Convênio</span>
+                <select id="contractOperatorSelect" name="operator_name" required>
+                    <option value="">Selecione o convênio</option>
+                    {% for operator_name in operator_names %}
+                    <option value="{{ operator_name }}">{{ operator_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
             <label class="contract-dropzone" id="contractDropzone" for="contractFileInput">
                 <input id="contractFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md" hidden>
                 <span>⇧</span>
@@ -345,5 +369,5 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="{{ url_for('static', path='js/contracts.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/contracts.js') }}?v=20260513-additional-form" defer></script>
 {% endblock %}

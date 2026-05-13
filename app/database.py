@@ -44,6 +44,9 @@ def ensure_existing_schema():
     additions = {
         "operator_id": "INTEGER",
         "import_batch_id": "INTEGER",
+        "responsible_name": "VARCHAR(255)",
+        "contact_info": "VARCHAR(255)",
+        "adjustment_type": "VARCHAR(100)",
     }
 
     with engine.begin() as connection:

@@ -22,7 +22,20 @@ function setupAiUpload() {
         fetch("/analises-ia/upload", {
             method: "POST",
             body: formData,
-        }).catch(() => {});
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.analysis_url) {
+                    window.location.href = data.analysis_url;
+                    return;
+                }
+                if (data.error) {
+                    openAiModal("Falha no upload", data.error);
+                }
+            })
+            .catch(() => {
+                openAiModal("Falha no upload", "Não foi possível anexar e analisar este contrato.");
+            });
     };
 
     dropzone?.addEventListener("click", () => input?.click());
@@ -73,7 +86,7 @@ function setupAiRun() {
 
             if (value >= 100) {
                 window.clearInterval(timer);
-                fetch("/analises-ia/run", { method: "POST" })
+                fetch(`/analises-ia/run${window.location.search}`, { method: "POST" })
                     .then((response) => response.json())
                     .then((data) => {
                         button.textContent = "Análise concluída";
@@ -154,7 +167,7 @@ function setupAiActions() {
     const close = document.getElementById("closeAiModal");
 
     document.getElementById("changeContract")?.addEventListener("click", () => {
-        alert("Alterar contrato");
+        window.location.href = "/contracts";
     });
 
     document.querySelectorAll(".js-new-analysis").forEach((button) => {
@@ -167,14 +180,14 @@ function setupAiActions() {
         button.addEventListener("click", () => {
             const row = button.closest(".ai-failure-row");
             const title = row?.querySelector("strong")?.textContent || "Detalhes da falha";
-            openAiModal(title, "Revise esta cláusula, valide o risco com o jurídico e prepare uma proposta de ajuste para proteger o hospital.");
+            openAiModal(title, button.dataset.detail || "Revise esta cláusula, valide o risco com o jurídico e prepare uma proposta de ajuste para proteger o hospital.");
         });
     });
 
     document.getElementById("openActionPlan")?.addEventListener("click", () => {
         openAiModal(
             "Plano de ação",
-            "Priorize reajuste anual, rescisão unilateral e penalidades. Em seguida, formalize critérios de glosas e reduza prazos de pagamento."
+            "Priorize pontos críticos, tabelas, reajuste, glosas, pagamento e rescisão. Em seguida, formalize uma contraproposta para a operadora."
         );
     });
 

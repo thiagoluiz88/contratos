@@ -861,6 +861,7 @@ svg {
 .operator-logo.sao { background: #0F766E; }
 .operator-logo.care { background: var(--purple); }
 .operator-logo.golden { background: #CA8A04; }
+.operator-logo.imported { background: #00843D; }
 
 .status-pill,
 .score-pill {
@@ -881,10 +882,67 @@ svg {
 .status-pill.critical { color: #C2410C; background: #FFF7ED; }
 .status-pill.suspended { color: #475467; background: #F2F4F7; }
 .status-pill.expired { color: #B42318; background: #FEF3F2; }
+.status-pill.imported { color: #027A48; background: #ECFDF3; }
 
 .score-pill.good { color: #027A48; background: #ECFDF3; }
 .score-pill.caution { color: #C2410C; background: #FFF7ED; }
 .score-pill.low { color: #B42318; background: #FEF3F2; }
+
+.additional-layout {
+    display: grid;
+    gap: 18px;
+}
+
+.additional-summary {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.additional-summary small {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.additional-summary h2 {
+    margin: 4px 0;
+}
+
+.additional-summary p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.additional-form-panel {
+    display: grid;
+    gap: 18px;
+}
+
+.additional-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.ai-empty-panel {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+}
+
+.ai-document-excerpt {
+    max-height: 360px;
+    overflow: auto;
+    margin-top: 14px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #FCFCFD;
+    color: #344054;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
 
 .row-actions {
     display: flex;
@@ -1072,6 +1130,34 @@ svg {
 .contract-import-form {
     display: grid;
     gap: 14px;
+}
+
+.contract-import-field {
+    display: grid;
+    gap: 8px;
+}
+
+.contract-import-field span {
+    color: #344054;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.contract-import-field select {
+    width: 100%;
+    min-height: 46px;
+    padding: 0 42px 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #FFFFFF;
+    color: #101828;
+    font: inherit;
+    font-weight: 700;
+}
+
+.contract-import-field select:focus {
+    outline: 3px solid rgba(0, 132, 61, 0.16);
+    border-color: rgba(0, 132, 61, 0.45);
 }
 
 .contract-dropzone {

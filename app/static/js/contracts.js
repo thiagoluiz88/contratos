@@ -117,7 +117,7 @@ function setupContractsFilters() {
         });
 
         if (counter) {
-            counter.textContent = `Mostrando ${visible ? 1 : 0} a ${visible} de 128 contratos`;
+            counter.textContent = `Mostrando ${visible ? 1 : 0} a ${visible} de ${rows.length} contratos`;
         }
         if (statusBadge) {
             statusBadge.textContent = `Status: ${statusFilter?.value || "Todos"}`;
@@ -182,6 +182,14 @@ function setupContractActions() {
             alert(messages[action] || `Ação em ${contract}`);
         });
     });
+
+    document.querySelectorAll("#contractsRows tr[data-contract-id]").forEach((row) => {
+        row.addEventListener("dblclick", (event) => {
+            if (event.target.closest("button, input, a, select")) return;
+            window.location.href = `/contracts/${row.dataset.contractId}/additional`;
+        });
+        row.title = "Clique duas vezes para abrir o cadastro adicional";
+    });
 }
 
 function openContractImportModal() {
@@ -201,6 +209,7 @@ function setupContractImport() {
     const form = document.getElementById("contractImportForm");
     const dropzone = document.getElementById("contractDropzone");
     const input = document.getElementById("contractFileInput");
+    const operatorSelect = document.getElementById("contractOperatorSelect");
     const fileLabel = document.getElementById("contractImportFile");
     const message = document.getElementById("contractImportMessage");
     const progress = document.getElementById("contractImportProgress");
@@ -215,6 +224,20 @@ function setupContractImport() {
         if (!message) return;
         message.textContent = text;
         message.className = `contract-import-message ${type}`;
+    };
+
+    const getSelectedOperatorName = () => {
+        const formData = form ? new FormData(form) : null;
+        const formValue = formData?.get("operator_name")?.toString().trim();
+        if (formValue) return formValue;
+
+        const selectedOption = operatorSelect?.selectedOptions?.[0];
+        const optionText = selectedOption?.textContent?.trim();
+        if (operatorSelect && operatorSelect.selectedIndex > 0 && optionText) {
+            return optionText;
+        }
+
+        return "";
     };
 
     const setFile = (file) => {
@@ -233,6 +256,11 @@ function setupContractImport() {
     };
 
     input?.addEventListener("change", () => setFile(input.files?.[0]));
+    operatorSelect?.addEventListener("change", () => {
+        if (getSelectedOperatorName()) {
+            setMessage(input?.files?.[0] ? "Arquivo pronto para importação." : "");
+        }
+    });
 
     ["dragenter", "dragover"].forEach((eventName) => {
         dropzone?.addEventListener(eventName, (event) => {
@@ -268,13 +296,20 @@ function setupContractImport() {
     form?.addEventListener("submit", async (event) => {
         event.preventDefault();
         const file = input?.files?.[0];
+        const formData = form ? new FormData(form) : new FormData();
+        const operatorName = getSelectedOperatorName();
+        if (!operatorName) {
+            setMessage("Selecione o convênio antes de importar.", "error");
+            operatorSelect?.focus();
+            return;
+        }
         if (!file) {
             setMessage("Selecione um arquivo antes de importar.", "error");
             return;
         }
 
-        const formData = new FormData();
-        formData.append("file", file);
+        formData.set("file", file);
+        formData.set("operator_name", operatorName);
         if (submit) submit.disabled = true;
         progress?.classList.add("is-visible");
         if (progressBar) progressBar.style.width = "35%";
@@ -286,7 +321,17 @@ function setupContractImport() {
                 method: "POST",
                 body: formData,
             });
-            const data = await response.json();
+            const responseText = await response.text();
+            let data = {};
+            try {
+                data = responseText ? JSON.parse(responseText) : {};
+            } catch (parseError) {
+                data = {
+                    error: response.ok
+                        ? "Resposta inesperada do servidor."
+                        : responseText || "Erro interno do servidor.",
+                };
+            }
             if (!response.ok) {
                 throw new Error(data.error || "Não foi possível importar o contrato.");
             }
