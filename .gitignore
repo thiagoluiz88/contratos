@@ -1,6 +1,7 @@
 .venv/
 venv/
 .tmp/
+.codex-run/
 __pycache__/
 *.pyc
 

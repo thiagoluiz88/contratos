@@ -13,7 +13,7 @@ from .database import SessionLocal, init_db
 from .models import Contract, ContractFile, ImportBatch, Operator
 from .services.contract_parser import parse_contract
 from .services.file_text import TextExtractionError, extract_text_from_file
-from .services.ai_analysis import build_contract_analysis
+from .services.ai_analysis import build_contract_analysis, persist_contract_analysis
 from .services.scoring import score_contract
 
 
@@ -567,6 +567,13 @@ async def import_contract(
             uploaded_by=request.session.get("user", {}).get("username"),
         )
         db.add(contract_file)
+        db.flush()
+        persist_contract_analysis(
+            db,
+            contract,
+            file_id=contract_file.id,
+            created_by=request.session.get("user", {}).get("username"),
+        )
         db.commit()
         db.refresh(contract)
 
@@ -780,6 +787,13 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             uploaded_by=request.session.get("user", {}).get("username"),
         )
         db.add(contract_file)
+        db.flush()
+        persist_contract_analysis(
+            db,
+            contract,
+            file_id=contract_file.id,
+            created_by=request.session.get("user", {}).get("username"),
+        )
         db.commit()
 
         return JSONResponse(
