@@ -130,7 +130,7 @@ function setupAditivosFilters() {
         });
 
         if (counter) {
-            counter.textContent = `Mostrando ${visible ? 1 : 0} a ${visible} de 56 aditivos`;
+            counter.textContent = `Mostrando ${visible ? 1 : 0} a ${visible} de ${rows.length} aditivos`;
         }
         if (statusBadge) {
             statusBadge.textContent = `Status: ${statusFilter?.value || "Todos"}`;
@@ -181,7 +181,7 @@ function setupAditivosFilters() {
 function setupAditivoActions() {
     document.querySelectorAll(".js-new-aditivo").forEach((button) => {
         button.addEventListener("click", () => {
-            window.location.href = "/aditivos/new";
+            openAditivoImportModal();
         });
     });
 
@@ -198,9 +198,157 @@ function setupAditivoActions() {
     });
 }
 
+function openAditivoImportModal() {
+    const modal = document.getElementById("aditivoImportModal");
+    modal?.classList.add("is-open");
+    modal?.setAttribute("aria-hidden", "false");
+}
+
+function closeAditivoImportModal() {
+    const modal = document.getElementById("aditivoImportModal");
+    modal?.classList.remove("is-open");
+    modal?.setAttribute("aria-hidden", "true");
+}
+
+function setupAditivoImport() {
+    const modal = document.getElementById("aditivoImportModal");
+    const form = document.getElementById("aditivoImportForm");
+    const dropzone = document.getElementById("aditivoDropzone");
+    const input = document.getElementById("aditivoFileInput");
+    const operatorSelect = document.getElementById("aditivoOperatorSelect");
+    const fileLabel = document.getElementById("aditivoImportFile");
+    const message = document.getElementById("aditivoImportMessage");
+    const progress = document.getElementById("aditivoImportProgress");
+    const progressBar = document.getElementById("aditivoImportProgressBar");
+    const progressText = document.getElementById("aditivoImportProgressText");
+    const submit = document.getElementById("submitAditivoImport");
+    const close = document.getElementById("closeAditivoImport");
+    const cancel = document.getElementById("cancelAditivoImport");
+    const allowedExtensions = [".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"];
+
+    const setMessage = (text, type = "") => {
+        if (!message) return;
+        message.textContent = text;
+        message.className = `contract-import-message ${type}`;
+    };
+
+    const setFile = (file) => {
+        if (!file) return;
+        const extension = `.${file.name.split(".").pop().toLowerCase()}`;
+        if (!allowedExtensions.includes(extension)) {
+            if (input) input.value = "";
+            if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
+            setMessage("Formato nao suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
+            return;
+        }
+        if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;
+        setMessage("Arquivo pronto para importacao. PDFs e imagens digitalizadas serao lidos com OCR quando necessario.", "success");
+    };
+
+    input?.addEventListener("change", () => setFile(input.files?.[0]));
+    operatorSelect?.addEventListener("change", () => {
+        if (operatorSelect.value && input?.files?.[0]) {
+            setMessage("Arquivo pronto para importacao. PDFs e imagens digitalizadas serao lidos com OCR quando necessario.", "success");
+        }
+    });
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+        dropzone?.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.add("is-dragging");
+        });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+        dropzone?.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropzone.classList.remove("is-dragging");
+        });
+    });
+
+    dropzone?.addEventListener("drop", (event) => {
+        const file = event.dataTransfer?.files?.[0];
+        if (!file || !input) return;
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+        setFile(file);
+    });
+
+    [close, cancel].forEach((button) => {
+        button?.addEventListener("click", closeAditivoImportModal);
+    });
+
+    modal?.addEventListener("click", (event) => {
+        if (event.target === modal) closeAditivoImportModal();
+    });
+
+    form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = input?.files?.[0];
+        const operatorName = operatorSelect?.value?.trim();
+
+        if (!operatorName) {
+            setMessage("Selecione o convênio do aditivo antes de importar.", "error");
+            operatorSelect?.focus();
+            return;
+        }
+        if (!file) {
+            setMessage("Selecione um arquivo antes de importar.", "error");
+            return;
+        }
+
+        const formData = new FormData(form);
+        formData.set("file", file);
+        formData.set("operator_name", operatorName);
+        formData.set("import_mode", "additive");
+
+        if (submit) submit.disabled = true;
+        progress?.classList.add("is-visible");
+        if (progressBar) progressBar.style.width = "35%";
+        if (progressText) progressText.textContent = "Salvando aditivo e extraindo texto...";
+        setMessage("");
+
+        try {
+            const response = await fetch("/contracts/import", {
+                method: "POST",
+                body: formData,
+            });
+            const responseText = await response.text();
+            let data = {};
+            try {
+                data = responseText ? JSON.parse(responseText) : {};
+            } catch (parseError) {
+                data = { error: responseText || "Resposta inesperada do servidor." };
+            }
+            if (!response.ok) {
+                throw new Error(data.error || "Não foi possível importar o aditivo.");
+            }
+            if (progressBar) progressBar.style.width = "100%";
+            if (progressText) progressText.textContent = "Importação concluída.";
+            setMessage(
+                data.warning
+                    ? `Aditivo importado com aviso: ${data.warning}`
+                    : `Aditivo importado: ${data.additive_name}`,
+                data.warning ? "warning" : "success",
+            );
+            window.setTimeout(() => {
+                window.location.href = "/aditivos";
+            }, 900);
+        } catch (error) {
+            if (progressBar) progressBar.style.width = "0";
+            if (progressText) progressText.textContent = "Importação interrompida.";
+            setMessage(error.message, "error");
+        } finally {
+            if (submit) submit.disabled = false;
+        }
+    });
+}
+
 window.addEventListener("DOMContentLoaded", () => {
     setupAditivosFilters();
     setupAditivoActions();
+    setupAditivoImport();
 });
 
 window.addEventListener("load", renderAditivosStatusChart);

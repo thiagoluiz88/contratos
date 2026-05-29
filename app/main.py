@@ -1,5 +1,4 @@
 from pathlib import Path
-from uuid import uuid4
 from datetime import date
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -9,23 +8,30 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 
+from .config import (
+    APP_PASSWORD,
+    APP_USER,
+    APP_USER_EMAIL,
+    APP_USER_NAME,
+    APP_USER_ROLE,
+    SESSION_HTTPS_ONLY,
+    SESSION_SECRET,
+    STATIC_DIR,
+    TEMPLATES_DIR,
+    UPLOAD_DIR,
+)
 from .database import SessionLocal, init_db
-from .models import Contract, ContractFile, ImportBatch, Operator
-from .services.contract_parser import parse_contract
-from .services.file_text import TextExtractionError, extract_text_from_file
+from .models import Contract, ContractAdditive, ContractFile, ImportBatch, Operator
 from .services.ai_analysis import build_contract_analysis, persist_contract_analysis
-from .services.scoring import score_contract
+from .services.uploads import UnsupportedUploadError, append_warning, prepare_contract_upload
 
 
-APP_USER = "admin"
-APP_PASSWORD = "admin123"
-SESSION_SECRET = "contracts-intelligence-session-secret"
 USERS = {
     APP_USER: {
         "password": APP_PASSWORD,
-        "name": "Allan Martins",
-        "role": "Administrador",
-        "email": "admin@contracts.local",
+        "name": APP_USER_NAME,
+        "role": APP_USER_ROLE,
+        "email": APP_USER_EMAIL,
     }
 }
 
@@ -35,18 +41,17 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site="lax",
-    https_only=False,
+    https_only=SESSION_HTTPS_ONLY,
 )
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-templates = Jinja2Templates(directory="app/templates")
-UPLOAD_DIR = Path("uploads/contracts")
-SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md"}
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 DEFAULT_OPERATOR_NAMES = [
     "Amil",
-    "Bradesco Saúde",
+    "Bradesco SaÃƒÂºde",
     "Hapvida",
-    "SulAmérica",
+    "SulAmÃƒÂ©rica",
     "Unimed",
 ]
 
@@ -109,8 +114,14 @@ def latest_contract_analysis_context(contract_id: int | None = None):
 def on_startup():
     try:
         init_db()
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     except OperationalError as exc:
-        print(f"Aviso: não foi possível inicializar o banco automaticamente: {exc}")
+        print(f"Aviso: nÃƒÂ£o foi possÃƒÂ­vel inicializar o banco automaticamente: {exc}")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 def is_logged_in(request: Request) -> bool:
@@ -266,6 +277,207 @@ def dashboard(request: Request):
     if redirect := require_login(request):
         return redirect
 
+    today = date.today()
+    db = SessionLocal()
+    try:
+        contracts_from_db = db.query(Contract).order_by(Contract.created_at.desc()).all()
+        additives_from_db = (
+            db.query(ContractAdditive)
+            .join(Contract)
+            .order_by(ContractAdditive.created_at.desc())
+            .all()
+        )
+
+        total_contracts = len(contracts_from_db)
+        active_contracts = 0
+        due_30 = 0
+        due_60 = 0
+        expired = 0
+        no_adjustment = 0
+        score_sum = 0
+        scored_count = 0
+        operator_counts = {}
+        status_counts = {
+            "Ativos": 0,
+            "Vencendo": 0,
+            "Vencidos": 0,
+            "Sem vigencia": 0,
+        }
+        expiration_counts = {
+            "Vencidos": 0,
+            "Ate 30 dias": 0,
+            "31 a 60 dias": 0,
+            "61 a 90 dias": 0,
+            "91 a 120 dias": 0,
+            "121 a 150 dias": 0,
+            "+150 dias": 0,
+        }
+        table_counts = {}
+        operator_scores = {}
+        attention_rows = []
+
+        for contract in contracts_from_db:
+            operator_name = contract.operator_name or "Operadora nao informada"
+            operator_counts[operator_name] = operator_counts.get(operator_name, 0) + 1
+
+            score = float(contract.score_total or 0)
+            score_sum += score
+            scored_count += 1
+            operator_scores.setdefault(operator_name, []).append(score)
+
+            table_name = (
+                contract.medical_fee_table
+                or contract.daily_rate_table
+                or contract.materials_table
+                or contract.medicines_table
+                or "Nao identificada"
+            )
+            table_counts[table_name] = table_counts.get(table_name, 0) + 1
+
+            if not (contract.reajust_index or contract.adjustment_type):
+                no_adjustment += 1
+
+            if contract.end_date:
+                days_left = (contract.end_date - today).days
+                if days_left < 0:
+                    expired += 1
+                    status_counts["Vencidos"] += 1
+                    expiration_counts["Vencidos"] += 1
+                    attention_rows.append(
+                        {
+                            "contract": contract.contract_number or f"Contrato #{contract.id}",
+                            "operator": operator_name,
+                            "term": format_br_date(contract.end_date),
+                            "badge": "red",
+                            "reason": "Vencido",
+                            "action": "Renovar contrato",
+                        }
+                    )
+                elif days_left <= 30:
+                    due_30 += 1
+                    due_60 += 1
+                    active_contracts += 1
+                    status_counts["Vencendo"] += 1
+                    expiration_counts["Ate 30 dias"] += 1
+                    attention_rows.append(
+                        {
+                            "contract": contract.contract_number or f"Contrato #{contract.id}",
+                            "operator": operator_name,
+                            "term": format_br_date(contract.end_date),
+                            "badge": "orange",
+                            "reason": f"Vence em {days_left} dias",
+                            "action": "Renovar contrato",
+                        }
+                    )
+                elif days_left <= 60:
+                    due_60 += 1
+                    active_contracts += 1
+                    status_counts["Vencendo"] += 1
+                    expiration_counts["31 a 60 dias"] += 1
+                    attention_rows.append(
+                        {
+                            "contract": contract.contract_number or f"Contrato #{contract.id}",
+                            "operator": operator_name,
+                            "term": format_br_date(contract.end_date),
+                            "badge": "yellow",
+                            "reason": f"Vence em {days_left} dias",
+                            "action": "Planejar renovacao",
+                        }
+                    )
+                else:
+                    active_contracts += 1
+                    status_counts["Ativos"] += 1
+                    if days_left <= 90:
+                        expiration_counts["61 a 90 dias"] += 1
+                    elif days_left <= 120:
+                        expiration_counts["91 a 120 dias"] += 1
+                    elif days_left <= 150:
+                        expiration_counts["121 a 150 dias"] += 1
+                    else:
+                        expiration_counts["+150 dias"] += 1
+            else:
+                status_counts["Sem vigencia"] += 1
+
+            if not (contract.reajust_index or contract.adjustment_type) and len(attention_rows) < 8:
+                attention_rows.append(
+                    {
+                        "contract": contract.contract_number or f"Contrato #{contract.id}",
+                        "operator": operator_name,
+                        "term": format_br_date(contract.end_date),
+                        "badge": "orange",
+                        "reason": "Sem reajuste definido",
+                        "action": "Revisar clausulas",
+                    }
+                )
+
+        additive_count = len(additives_from_db)
+        pending_additives = sum(1 for additive in additives_from_db if additive.status != "active")
+        recent_activities = []
+        for contract in contracts_from_db[:5]:
+            recent_activities.append(
+                {
+                    "date": contract.created_at,
+                    "title": "Contrato importado",
+                    "text": f"{contract.operator_name or 'Operadora'} - {contract.contract_number or contract.contract_name}",
+                }
+            )
+        for additive in additives_from_db[:5]:
+            recent_activities.append(
+                {
+                    "date": additive.created_at,
+                    "title": "Aditivo importado",
+                    "text": f"{additive.contract.operator_name or 'Operadora'} - {additive.additive_number}",
+                }
+            )
+        recent_activities.sort(key=lambda item: item["date"], reverse=True)
+        recent_activities = recent_activities[:5]
+
+        operator_chart_items = sorted(operator_counts.items(), key=lambda item: item[1], reverse=True)[:6]
+        table_chart_items = sorted(table_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+        score_rows = [
+            {
+                "operator": operator,
+                "score": round(sum(values) / len(values)) if values else 0,
+            }
+            for operator, values in operator_scores.items()
+        ]
+        score_rows.sort(key=lambda item: item["score"], reverse=True)
+
+        dashboard_data = {
+            "expiration": {
+                "labels": list(expiration_counts.keys()),
+                "values": list(expiration_counts.values()),
+            },
+            "operators": {
+                "labels": [item[0] for item in operator_chart_items],
+                "values": [item[1] for item in operator_chart_items],
+                "total": total_contracts,
+            },
+            "status": {
+                "labels": list(status_counts.keys()),
+                "values": list(status_counts.values()),
+                "total": total_contracts,
+            },
+            "tables": {
+                "labels": [item[0] for item in table_chart_items],
+                "values": [item[1] for item in table_chart_items],
+                "total": total_contracts,
+            },
+        }
+        metrics = {
+            "active_contracts": active_contracts,
+            "due_30": due_30,
+            "due_60": due_60,
+            "expired": expired,
+            "no_adjustment": no_adjustment,
+            "average_score": round(score_sum / scored_count) if scored_count else 0,
+            "additive_count": additive_count,
+            "pending_additives": pending_additives,
+            "total_contracts": total_contracts,
+        }
+    finally:
+        db.close()
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -273,6 +485,11 @@ def dashboard(request: Request):
             "title": "Painel Executivo",
             "active_page": "dashboard",
             "user": request.session.get("user"),
+            "metrics": metrics,
+            "dashboard_data": dashboard_data,
+            "attention_rows": attention_rows[:8],
+            "recent_activities": recent_activities,
+            "score_rows": score_rows[:5],
         },
     )
 
@@ -288,7 +505,7 @@ def contracts(request: Request):
         contract_rows = []
         for contract in contracts_from_db:
             status_label, status_class = contract_status(contract)
-            operator_name = contract.operator_name or "Operadora não informada"
+            operator_name = contract.operator_name or "Operadora nÃƒÂ£o informada"
             contract_rows.append(
                 {
                     "id": contract.id,
@@ -302,7 +519,7 @@ def contracts(request: Request):
                     "original_filename": contract.original_filename or "-",
                     "start_date": format_br_date(contract.start_date),
                     "end_date": format_br_date(contract.end_date),
-                    "reajust_index": contract.adjustment_type or contract.reajust_index or "Não identificado",
+                    "reajust_index": contract.adjustment_type or contract.reajust_index or "NÃƒÂ£o identificado",
                     "status_label": status_label,
                     "status_class": status_class,
                     "score": int(contract.score_total or 0),
@@ -366,7 +583,7 @@ def contract_additional_page(request: Request, contract_id: int, saved: int = 0)
                     "IGP-M",
                     "INPC",
                     "FIPE",
-                    "Sem índice definido",
+                    "Sem ÃƒÂ­ndice definido",
                     "Pendente",
                     "Outro",
                 ],
@@ -408,63 +625,44 @@ async def import_contract(
     request: Request,
     file: UploadFile = File(...),
     operator_name: str | None = Form(default=None),
+    import_mode: str = Form(default="contract"),
 ):
     if redirect := require_login(request):
         return redirect
 
     selected_operator_name = (operator_name or "").strip()
+    is_additive = import_mode == "additive"
     if not selected_operator_name:
         return JSONResponse(
-            {"error": "Selecione o convênio antes de importar o contrato."},
-            status_code=400,
-        )
-
-    original_filename = file.filename or "contrato"
-    extension = Path(original_filename).suffix.lower()
-    if extension not in SUPPORTED_CONTRACT_EXTENSIONS:
-        return JSONResponse(
             {
-                "error": "Formato não suportado. Envie PDF, DOCX, DOC, TXT ou MD.",
+                "error": (
+                    "Selecione o convenio do aditivo antes de importar."
+                    if is_additive
+                    else "Selecione o convenio antes de importar o contrato."
+                )
             },
             status_code=400,
         )
 
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    stored_name = f"{uuid4().hex}{extension}"
-    stored_path = UPLOAD_DIR / stored_name
-    file_size = 0
+    try:
+        upload = await prepare_contract_upload(
+            file,
+            SUPPORTED_CONTRACT_EXTENSIONS,
+            "Arquivo DOC salvo. Extracao automatica de DOC legado nao esta disponivel; converta para DOCX/PDF para analise completa.",
+        )
+    except UnsupportedUploadError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
-    with stored_path.open("wb") as destination:
-        while chunk := await file.read(1024 * 1024):
-            file_size += len(chunk)
-            destination.write(chunk)
-
-    extraction_status = "completed"
-    extraction_method = None
-    extraction_confidence = None
-    raw_text = None
-    warning = None
-
-    if extension == ".doc":
-        extraction_status = "pending"
-        warning = "Arquivo DOC salvo. Extração automática de DOC legado não está disponível; converta para DOCX/PDF para análise completa."
-    else:
-        try:
-            extraction = extract_text_from_file(stored_path)
-            raw_text = extraction.get("text")
-            extraction_method = extraction.get("method")
-            extraction_confidence = extraction.get("confidence")
-        except TextExtractionError as exc:
-            extraction_status = "failed"
-            warning = str(exc)
-
-    parsed = parse_contract(raw_text or "", original_filename) if raw_text else {
-        "contract_name": Path(original_filename).stem,
-        "operator_name": None,
-        "contract_number": None,
-        "raw_text": raw_text,
-    }
-    scoring = score_contract(parsed)
+    parsed = upload.parsed
+    warning = upload.warning
+    original_filename = upload.original_filename
+    stored_path = upload.stored_path
+    file_size = upload.file_size
+    raw_text = upload.raw_text
+    extraction_status = upload.extraction_status
+    extraction_method = upload.extraction_method
+    extraction_confidence = upload.extraction_confidence
+    scoring = upload.scoring
 
     db = SessionLocal()
     try:
@@ -483,10 +681,88 @@ async def import_contract(
             db.add(operator)
             db.flush()
         if parsed_operator_name and parsed_operator_name != selected_operator_name:
-            warning = (
-                f"{warning} Operadora detectada no arquivo: {parsed_operator_name}."
-                if warning
-                else f"Operadora detectada no arquivo: {parsed_operator_name}."
+            warning = append_warning(warning, f"Operadora detectada no arquivo: {parsed_operator_name}.")
+
+        if is_additive:
+            parent_contract = (
+                db.query(Contract)
+                .filter(Contract.operator_name == selected_operator_name)
+                .order_by(Contract.created_at.desc())
+                .first()
+            )
+            if not parent_contract:
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Nao ha contrato cadastrado para este convenio. "
+                            "Cadastre o contrato principal antes de importar o aditivo."
+                        )
+                    },
+                    status_code=400,
+                )
+
+            batch = ImportBatch(
+                source_type="upload_additive",
+                original_filename=original_filename,
+                stored_filepath=str(stored_path),
+                status="completed" if extraction_status != "failed" else "completed_with_warnings",
+                total_records=1,
+                imported_records=1,
+                failed_records=0 if extraction_status != "failed" else 1,
+                notes=warning,
+                created_by=request.session.get("user", {}).get("username"),
+            )
+            db.add(batch)
+            db.flush()
+
+            additive = ContractAdditive(
+                contract_id=parent_contract.id,
+                additive_number=contract_number or Path(original_filename).stem,
+                additive_type="Aditivo",
+                object_summary=parsed.get("contract_object"),
+                signature_date=parsed.get("signature_date"),
+                start_date=parsed.get("start_date"),
+                end_date=parsed.get("end_date"),
+                status="active",
+                reajust_index=parsed.get("reajust_index"),
+                raw_text=raw_text,
+                original_filename=original_filename,
+                stored_filepath=str(stored_path),
+            )
+            db.add(additive)
+            db.flush()
+
+            contract_file = ContractFile(
+                contract_id=parent_contract.id,
+                import_batch_id=batch.id,
+                file_type="additive",
+                original_filename=original_filename,
+                stored_filepath=str(stored_path),
+                mime_type=file.content_type,
+                file_size_bytes=file_size,
+                extracted_text=raw_text,
+                extraction_status=extraction_status,
+                extraction_method=extraction_method,
+                uploaded_by=request.session.get("user", {}).get("username"),
+            )
+            db.add(contract_file)
+            db.commit()
+            db.refresh(additive)
+
+            return JSONResponse(
+                {
+                    "id": additive.id,
+                    "additive_name": additive.additive_number,
+                    "contract_id": parent_contract.id,
+                    "contract_name": parent_contract.contract_name,
+                    "operator_name": selected_operator_name,
+                    "filename": original_filename,
+                    "stored_filepath": str(stored_path),
+                    "extraction_status": extraction_status,
+                    "extraction_method": extraction_method,
+                    "extraction_confidence": extraction_confidence,
+                    "warning": warning,
+                }
             )
 
         batch = ImportBatch(
@@ -618,6 +894,53 @@ def aditivos(request: Request):
     if redirect := require_login(request):
         return redirect
 
+    db = SessionLocal()
+    try:
+        additive_rows = []
+        additives_from_db = (
+            db.query(ContractAdditive)
+            .join(Contract)
+            .order_by(ContractAdditive.created_at.desc())
+            .all()
+        )
+        for additive in additives_from_db:
+            contract = additive.contract
+            operator_name = contract.operator_name or "Operadora nao informada"
+            additive_rows.append(
+                {
+                    "id": additive.id,
+                    "additive_number": additive.additive_number,
+                    "additive_type": additive.additive_type or "Aditivo",
+                    "object_summary": additive.object_summary or additive.original_filename or "-",
+                    "signature_date": format_br_date(additive.signature_date),
+                    "start_date": format_br_date(additive.start_date),
+                    "end_date": format_br_date(additive.end_date),
+                    "status_label": "Ativo" if additive.status == "active" else additive.status.title(),
+                    "status_class": "active" if additive.status == "active" else "document",
+                    "reajust_index": additive.reajust_index,
+                    "responsible_name": additive.responsible_name or "-",
+                    "responsible_role": additive.responsible_role or "Cadastro do aditivo",
+                    "contract_number": contract.contract_number or f"Contrato #{contract.id}",
+                    "contract_name": contract.contract_name,
+                    "operator_name": operator_name,
+                    "operator_initial": operator_name[:1].upper(),
+                    "operator_logo_class": operator_logo_class(operator_name),
+                    "original_filename": additive.original_filename or "-",
+                }
+            )
+
+        operator_names = {
+            name
+            for (name,) in db.query(Contract.operator_name)
+            .filter(Contract.operator_name.isnot(None), Contract.operator_name != "")
+            .distinct()
+            .all()
+            if name
+        }
+        operator_names.update(DEFAULT_OPERATOR_NAMES)
+    finally:
+        db.close()
+
     return templates.TemplateResponse(
         request,
         "aditivos.html",
@@ -625,6 +948,9 @@ def aditivos(request: Request):
             "title": "Aditivos",
             "active_page": "aditivos",
             "user": request.session.get("user"),
+            "additive_rows": additive_rows,
+            "additive_count": len(additive_rows),
+            "operator_names": sorted(operator_names),
         },
     )
 
@@ -639,7 +965,7 @@ def analises_ia(request: Request, contract_id: int | None = None):
         request,
         "analises_ia.html",
         {
-            "title": "Análises por IA",
+            "title": "AnÃƒÂ¡lises por IA",
             "active_page": "analises_ia",
             "user": request.session.get("user"),
             "contract": selected_contract,
@@ -655,50 +981,25 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
     if redirect := require_login(request):
         return redirect
 
-    original_filename = file.filename or "contrato"
-    extension = Path(original_filename).suffix.lower()
-    if extension not in SUPPORTED_CONTRACT_EXTENSIONS:
-        return JSONResponse(
-            {"error": "Formato não suportado. Envie PDF, DOCX, DOC, TXT ou MD."},
-            status_code=400,
+    try:
+        upload = await prepare_contract_upload(
+            file,
+            SUPPORTED_CONTRACT_EXTENSIONS,
+            "Arquivo DOC salvo. Converta para DOCX/PDF para leitura automatica completa.",
         )
+    except UnsupportedUploadError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    stored_name = f"{uuid4().hex}{extension}"
-    stored_path = UPLOAD_DIR / stored_name
-    file_size = 0
-
-    with stored_path.open("wb") as destination:
-        while chunk := await file.read(1024 * 1024):
-            file_size += len(chunk)
-            destination.write(chunk)
-
-    extraction_status = "completed"
-    extraction_method = None
-    extraction_confidence = None
-    raw_text = None
-    warning = None
-
-    if extension == ".doc":
-        extraction_status = "pending"
-        warning = "Arquivo DOC salvo. Converta para DOCX/PDF para leitura automática completa."
-    else:
-        try:
-            extraction = extract_text_from_file(stored_path)
-            raw_text = extraction.get("text")
-            extraction_method = extraction.get("method")
-            extraction_confidence = extraction.get("confidence")
-        except TextExtractionError as exc:
-            extraction_status = "failed"
-            warning = str(exc)
-
-    parsed = parse_contract(raw_text or "", original_filename) if raw_text else {
-        "contract_name": Path(original_filename).stem,
-        "operator_name": None,
-        "contract_number": None,
-        "raw_text": raw_text,
-    }
-    scoring = score_contract(parsed)
+    parsed = upload.parsed
+    scoring = upload.scoring
+    original_filename = upload.original_filename
+    stored_path = upload.stored_path
+    file_size = upload.file_size
+    raw_text = upload.raw_text
+    extraction_status = upload.extraction_status
+    extraction_method = upload.extraction_method
+    extraction_confidence = upload.extraction_confidence
+    warning = upload.warning
     operator_name = parsed.get("operator_name") or Path(original_filename).stem
 
     db = SessionLocal()
@@ -809,7 +1110,7 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
     except SQLAlchemyError as exc:
         db.rollback()
         return JSONResponse(
-            {"error": "Não foi possível gravar o contrato para análise.", "detail": str(exc)},
+            {"error": "NÃƒÂ£o foi possÃƒÂ­vel gravar o contrato para anÃƒÂ¡lise.", "detail": str(exc)},
             status_code=500,
         )
     finally:
@@ -845,7 +1146,7 @@ def comparacoes(request: Request):
         request,
         "comparacoes.html",
         {
-            "title": "Comparações",
+            "title": "ComparaÃƒÂ§ÃƒÂµes",
             "active_page": "comparacoes",
             "user": request.session.get("user"),
         },

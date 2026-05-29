@@ -166,7 +166,13 @@ function setupContractsFilters() {
 function setupContractActions() {
     document.querySelectorAll(".js-new-contract").forEach((button) => {
         button.addEventListener("click", () => {
-            openContractImportModal();
+            openContractImportModal("contract");
+        });
+    });
+
+    document.querySelectorAll(".js-new-aditivo").forEach((button) => {
+        button.addEventListener("click", () => {
+            openContractImportModal("additive");
         });
     });
 
@@ -190,10 +196,50 @@ function setupContractActions() {
         });
         row.title = "Clique duas vezes para abrir o cadastro adicional";
     });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("newContract") === "1") {
+        openContractImportModal("contract");
+    }
+    if (params.get("newAditivo") === "1") {
+        openContractImportModal("additive");
+    }
 }
 
-function openContractImportModal() {
+function setContractImportMode(mode = "contract") {
+    const isAdditive = mode === "additive";
     const modal = document.getElementById("contractImportModal");
+    const modeInput = document.getElementById("contractImportMode");
+    const title = document.getElementById("contractImportTitle");
+    const description = document.getElementById("contractImportDescription");
+    const operatorLabel = document.getElementById("contractOperatorLabel");
+    const operatorSelect = document.getElementById("contractOperatorSelect");
+    const dropzoneTitle = document.getElementById("contractDropzoneTitle");
+    const submit = document.getElementById("submitContractImport");
+
+    modal?.setAttribute("data-import-mode", mode);
+    if (modeInput) modeInput.value = mode;
+    if (title) title.textContent = isAdditive ? "Novo aditivo" : "Novo contrato";
+    if (description) {
+        description.textContent = isAdditive
+            ? "Importe o arquivo do aditivo e informe de qual convenio ele faz parte."
+            : "Adicione ou importe PDF, DOCX, DOC, TXT, MD e imagens digitalizadas com OCR.";
+    }
+    if (operatorLabel) operatorLabel.textContent = isAdditive ? "Convenio do aditivo" : "Convenio";
+    if (operatorSelect?.options?.[0]) {
+        operatorSelect.options[0].textContent = isAdditive ? "Selecione o convenio do aditivo" : "Selecione o convenio";
+    }
+    if (dropzoneTitle) {
+        dropzoneTitle.textContent = isAdditive
+            ? "Arraste o arquivo do aditivo aqui ou clique para selecionar"
+            : "Arraste o arquivo do contrato aqui ou clique para selecionar";
+    }
+    if (submit) submit.textContent = isAdditive ? "Importar aditivo" : "Importar contrato";
+}
+
+function openContractImportModal(mode = "contract") {
+    const modal = document.getElementById("contractImportModal");
+    setContractImportMode(mode);
     modal?.classList.add("is-open");
     modal?.setAttribute("aria-hidden", "false");
 }
@@ -210,6 +256,7 @@ function setupContractImport() {
     const dropzone = document.getElementById("contractDropzone");
     const input = document.getElementById("contractFileInput");
     const operatorSelect = document.getElementById("contractOperatorSelect");
+    const modeInput = document.getElementById("contractImportMode");
     const fileLabel = document.getElementById("contractImportFile");
     const message = document.getElementById("contractImportMessage");
     const progress = document.getElementById("contractImportProgress");
@@ -218,7 +265,7 @@ function setupContractImport() {
     const submit = document.getElementById("submitContractImport");
     const close = document.getElementById("closeContractImport");
     const cancel = document.getElementById("cancelContractImport");
-    const allowedExtensions = [".pdf", ".docx", ".doc", ".txt", ".md"];
+    const allowedExtensions = [".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"];
 
     const setMessage = (text, type = "") => {
         if (!message) return;
@@ -246,13 +293,13 @@ function setupContractImport() {
         if (!allowedExtensions.includes(extension)) {
             if (input) input.value = "";
             if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
-            setMessage("Formato não suportado. Envie PDF, DOCX, DOC, TXT ou MD.", "error");
+            setMessage("Formato nao suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
             return;
         }
         if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;
         setMessage(extension === ".doc"
-            ? "DOC legado será salvo; para extração automática completa, prefira DOCX ou PDF."
-            : "Arquivo pronto para importação.", "success");
+            ? "DOC legado sera salvo; para extracao automatica completa, prefira DOCX, PDF ou imagem com OCR."
+            : "Arquivo pronto para importacao. PDFs e imagens digitalizadas serao lidos com OCR quando necessario.", "success");
     };
 
     input?.addEventListener("change", () => setFile(input.files?.[0]));
@@ -298,8 +345,14 @@ function setupContractImport() {
         const file = input?.files?.[0];
         const formData = form ? new FormData(form) : new FormData();
         const operatorName = getSelectedOperatorName();
+        const isAdditive = modeInput?.value === "additive";
         if (!operatorName) {
-            setMessage("Selecione o convênio antes de importar.", "error");
+            setMessage(
+                isAdditive
+                    ? "Selecione o convenio do aditivo antes de importar."
+                    : "Selecione o convenio antes de importar.",
+                "error",
+            );
             operatorSelect?.focus();
             return;
         }
@@ -310,10 +363,15 @@ function setupContractImport() {
 
         formData.set("file", file);
         formData.set("operator_name", operatorName);
+        formData.set("import_mode", isAdditive ? "additive" : "contract");
         if (submit) submit.disabled = true;
         progress?.classList.add("is-visible");
         if (progressBar) progressBar.style.width = "35%";
-        if (progressText) progressText.textContent = "Salvando arquivo e extraindo texto...";
+        if (progressText) {
+            progressText.textContent = isAdditive
+                ? "Salvando aditivo e extraindo texto..."
+                : "Salvando arquivo e extraindo texto...";
+        }
         setMessage("");
 
         try {
@@ -333,14 +391,14 @@ function setupContractImport() {
                 };
             }
             if (!response.ok) {
-                throw new Error(data.error || "Não foi possível importar o contrato.");
+                throw new Error(data.error || `Nao foi possivel importar o ${isAdditive ? "aditivo" : "contrato"}.`);
             }
             if (progressBar) progressBar.style.width = "100%";
-            if (progressText) progressText.textContent = "Importação concluída.";
+            if (progressText) progressText.textContent = "Importacao concluida.";
             setMessage(
                 data.warning
-                    ? `Contrato importado com aviso: ${data.warning}`
-                    : `Contrato importado: ${data.contract_name}`,
+                    ? `${isAdditive ? "Aditivo" : "Contrato"} importado com aviso: ${data.warning}`
+                    : `${isAdditive ? "Aditivo" : "Contrato"} importado: ${isAdditive ? data.additive_name : data.contract_name}`,
                 data.warning ? "warning" : "success",
             );
             window.setTimeout(() => {

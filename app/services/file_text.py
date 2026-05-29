@@ -3,9 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pdfplumber
-import pytesseract
 from docx import Document
-from pdf2image import convert_from_path
 
 
 class TextExtractionError(Exception):
@@ -29,6 +27,8 @@ def extract_text_from_file(file_path: str | Path) -> ExtractionResult:
         return ExtractionResult(text=text, method="docx", confidence=0.98)
     if suffix in {".txt", ".md"}:
         return ExtractionResult(text=path.read_text(encoding="utf-8", errors="ignore"), method="text", confidence=0.99)
+    if suffix in {".jpg", ".jpeg", ".png", ".tif", ".tiff"}:
+        return _extract_image_via_ocr(path)
 
     raise TextExtractionError(f"Formato não suportado: {suffix}")
 
@@ -49,11 +49,55 @@ def _extract_pdf(path: Path) -> ExtractionResult:
 
 
 def _extract_pdf_via_ocr(path: Path) -> ExtractionResult:
-    pages = convert_from_path(str(path), dpi=220)
+    try:
+        from pdf2image import convert_from_path
+        from pdf2image.exceptions import PDFInfoNotInstalledError, PDFPageCountError, PDFSyntaxError
+
+        pages = convert_from_path(str(path), dpi=220)
+    except ImportError as exc:
+        raise TextExtractionError(
+            "PDF sem texto detectado, mas o OCR esta desativado neste container. "
+            "Reconstrua com INSTALL_OCR=true para ler PDFs escaneados."
+        ) from exc
+    except (PDFInfoNotInstalledError, PDFPageCountError, PDFSyntaxError) as exc:
+        raise TextExtractionError(
+            "PDF sem texto detectado, mas o OCR de PDF precisa do Poppler instalado e configurado no PATH."
+        ) from exc
+    return _extract_images_via_ocr(pages, method="pdf_ocr")
+
+
+def _extract_image_via_ocr(path: Path) -> ExtractionResult:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise TextExtractionError(
+            "OCR de imagem esta desativado neste container. "
+            "Reconstrua com INSTALL_OCR=true para ler imagens."
+        ) from exc
+
+    with Image.open(path) as image:
+        return _extract_images_via_ocr([image.copy()], method="image_ocr")
+
+
+def _extract_images_via_ocr(images, method: str) -> ExtractionResult:
+    try:
+        import pytesseract
+    except ImportError as exc:
+        raise TextExtractionError(
+            "OCR esta desativado neste container. Reconstrua com INSTALL_OCR=true para habilitar Tesseract."
+        ) from exc
+
     texts: list[str] = []
     confidences: list[float] = []
-    for image in pages:
-        data = pytesseract.image_to_data(image, lang="por", output_type=pytesseract.Output.DICT)
+    for image in images:
+        try:
+            data = pytesseract.image_to_data(image, lang="por", output_type=pytesseract.Output.DICT)
+        except pytesseract.TesseractNotFoundError as exc:
+            raise TextExtractionError(
+                "OCR indisponivel: Tesseract nao esta instalado ou nao esta configurado no PATH."
+            ) from exc
+        except pytesseract.TesseractError as exc:
+            raise TextExtractionError(f"OCR nao conseguiu ler o arquivo: {exc}") from exc
         words = []
         for i, word in enumerate(data.get("text", [])):
             word = (word or "").strip()
@@ -71,10 +115,10 @@ def _extract_pdf_via_ocr(path: Path) -> ExtractionResult:
     extracted = "\n\n".join(texts).strip()
     if not extracted:
         raise TextExtractionError(
-            "Não foi possível extrair texto do PDF. Mesmo com OCR, o conteúdo não ficou legível."
+            "Nao foi possivel extrair texto do arquivo. Mesmo com OCR, o conteudo nao ficou legivel."
         )
     avg_conf = (sum(confidences) / len(confidences) / 100.0) if confidences else 0.70
-    return ExtractionResult(text=extracted, method="pdf_ocr", confidence=round(avg_conf, 2))
+    return ExtractionResult(text=extracted, method=method, confidence=round(avg_conf, 2))
 
 
 def _extract_docx(path: Path) -> str:

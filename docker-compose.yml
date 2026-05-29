@@ -1,0 +1,30 @@
+services:
+  contratos:
+    build:
+      context: .
+      args:
+        INSTALL_OCR: ${INSTALL_OCR:-false}
+    container_name: contratos-app
+    environment:
+      APP_USER: ${APP_USER:-admin}
+      APP_PASSWORD: ${APP_PASSWORD:-admin123}
+      APP_USER_NAME: ${APP_USER_NAME:-Allan Martins}
+      APP_USER_EMAIL: ${APP_USER_EMAIL:-admin@contracts.local}
+      APP_USER_ROLE: ${APP_USER_ROLE:-Administrador}
+      APP_SECRET: ${APP_SECRET:-troque-esta-chave-por-uma-chave-forte}
+      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-false}
+      DATABASE_URL: sqlite:////data/contracts.db
+      UPLOAD_DIR: /data/uploads/contracts
+    ports:
+      - "8000:8000"
+    volumes:
+      - contratos-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  contratos-data:

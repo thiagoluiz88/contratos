@@ -1,5 +1,8 @@
 fastapi
-uvicorn[standard]
+uvicorn
 jinja2
 python-multipart
 itsdangerous
+SQLAlchemy
+pdfplumber
+python-docx

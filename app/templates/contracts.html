@@ -301,7 +301,7 @@
             <div class="panel-header"><h2>Ações rápidas</h2></div>
             <div class="quick-actions">
                 <button class="js-new-contract" type="button">Novo contrato</button>
-                <button type="button">Registrar aditivo</button>
+                <button class="js-new-aditivo" type="button">Registrar aditivo</button>
                 <button type="button">Importar contratos</button>
                 <button type="button">Renovação em massa</button>
                 <button type="button">Gerar relatório</button>
@@ -332,13 +332,14 @@
             <span class="metric-icon green">□</span>
             <div>
                 <h2 id="contractImportTitle">Novo contrato</h2>
-                <p>Adicione ou importe arquivos PDF, DOCX, DOC, TXT, MD e PDFs digitalizados com OCR.</p>
+                <p id="contractImportDescription">Adicione ou importe PDF, DOCX, DOC, TXT, MD e imagens digitalizadas com OCR.</p>
             </div>
         </div>
 
         <form id="contractImportForm" class="contract-import-form">
+            <input id="contractImportMode" type="hidden" name="import_mode" value="contract">
             <label class="contract-import-field" for="contractOperatorSelect">
-                <span>Convênio</span>
+                <span id="contractOperatorLabel">Convênio</span>
                 <select id="contractOperatorSelect" name="operator_name" required>
                     <option value="">Selecione o convênio</option>
                     {% for operator_name in operator_names %}
@@ -347,10 +348,10 @@
                 </select>
             </label>
             <label class="contract-dropzone" id="contractDropzone" for="contractFileInput">
-                <input id="contractFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md" hidden>
+                <input id="contractFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.jpg,.jpeg,.png,.tif,.tiff,image/*" hidden>
                 <span>⇧</span>
-                <strong>Arraste o arquivo do contrato aqui ou clique para selecionar</strong>
-                <small>Formatos: PDF, DOCX, DOC, TXT, MD. PDFs sem texto serão enviados para OCR.</small>
+                <strong id="contractDropzoneTitle">Arraste o arquivo do contrato aqui ou clique para selecionar</strong>
+                <small>Formatos: PDF, DOCX, DOC, TXT, MD, JPG, PNG e TIFF. PDFs ou imagens digitalizadas serão lidos com OCR.</small>
             </label>
             <div class="contract-import-file" id="contractImportFile">Nenhum arquivo selecionado</div>
             <div class="contract-import-progress" id="contractImportProgress" aria-hidden="true">
@@ -369,5 +370,5 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="{{ url_for('static', path='js/contracts.js') }}?v=20260513-additional-form" defer></script>
+<script src="{{ url_for('static', path='js/contracts.js') }}?v=20260527-additive-import-mode" defer></script>
 {% endblock %}

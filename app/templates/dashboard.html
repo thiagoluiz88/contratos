@@ -3,47 +3,47 @@
 {% block content %}
 <header class="topbar">
     <div>
-        <h1>Olá, Allan! 👋</h1>
-        <p>Aqui está o resumo executivo da gestão dos seus contratos.</p>
+        <h1>Ola, Allan!</h1>
+        <p>Aqui esta o resumo executivo atualizado da gestao dos seus contratos e aditivos.</p>
     </div>
     <div class="topbar-actions">
         <label class="search-box" aria-label="Buscar">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
             <input id="contractSearch" type="search" placeholder="Buscar contratos, operadoras...">
         </label>
-        <button class="icon-button" type="button" aria-label="Notificações">
-            <span>🔔</span>
-            <b class="floating-badge">3</b>
+        <button class="icon-button" type="button" aria-label="Notificacoes">
+            <span>!</span>
+            <b class="floating-badge">{{ attention_rows|length }}</b>
         </button>
         <button id="newContractButton" class="primary-button compact" type="button">+ Novo contrato</button>
-        <button class="period-button" type="button">12/05/2024 - 12/06/2024</button>
+        <button class="period-button" type="button">{{ metrics.total_contracts + metrics.additive_count }} documentos</button>
     </div>
 </header>
 
 <section class="metric-grid" aria-label="Indicadores principais">
     <article class="metric-card reveal">
-        <span class="metric-icon green">▤</span>
-        <div><p>Contratos ativos</p><strong>128</strong><small>+8 este mês</small></div>
+        <span class="metric-icon green">□</span>
+        <div><p>Contratos ativos</p><strong>{{ metrics.active_contracts }}</strong><small>{{ metrics.total_contracts }} contratos cadastrados</small></div>
     </article>
     <article class="metric-card reveal">
-        <span class="metric-icon orange">◷</span>
-        <div><p>Vencendo em 30 dias</p><strong>15</strong><small>+3 em relação ao mês anterior</small></div>
+        <span class="metric-icon orange">◇</span>
+        <div><p>Vencendo em 30 dias</p><strong>{{ metrics.due_30 }}</strong><small>Contratos com vencimento proximo</small></div>
     </article>
     <article class="metric-card reveal">
-        <span class="metric-icon yellow">◷</span>
-        <div><p>Vencendo em 60 dias</p><strong>28</strong><small>+5 em relação ao mês anterior</small></div>
+        <span class="metric-icon yellow">◇</span>
+        <div><p>Vencendo em 60 dias</p><strong>{{ metrics.due_60 }}</strong><small>Inclui os proximos 30 dias</small></div>
     </article>
     <article class="metric-card reveal">
         <span class="metric-icon red">!</span>
-        <div><p>Vencidos</p><strong>7</strong><small>+2 em relação ao mês anterior</small></div>
+        <div><p>Vencidos</p><strong>{{ metrics.expired }}</strong><small>Contratos com vigencia encerrada</small></div>
     </article>
     <article class="metric-card reveal">
         <span class="metric-icon purple">↗</span>
-        <div><p>Sem reajuste</p><strong>18</strong><small>+4 em relação ao mês anterior</small></div>
+        <div><p>Aditivos importados</p><strong>{{ metrics.additive_count }}</strong><small>{{ metrics.pending_additives }} pendentes</small></div>
     </article>
     <article class="metric-card reveal">
-        <span class="metric-icon green">◎</span>
-        <div><p>Score médio</p><strong>82/100</strong><small>Muito bom</small></div>
+        <span class="metric-icon green">●</span>
+        <div><p>Score medio</p><strong>{{ metrics.average_score }}/100</strong><small>{{ metrics.no_adjustment }} contratos sem reajuste</small></div>
     </article>
 </section>
 
@@ -51,7 +51,7 @@
     <article class="panel chart-panel reveal">
         <div class="panel-header">
             <h2>Vencimentos dos contratos</h2>
-            <button class="ghost-button" type="button">Próximos 120 dias</button>
+            <button class="ghost-button" type="button">Proximos 150 dias</button>
         </div>
         <div class="chart-area tall">
             <canvas id="expirationChart"></canvas>
@@ -61,7 +61,7 @@
     <article class="panel reveal">
         <div class="panel-header">
             <h2>Contratos por operadora</h2>
-            <a href="#">Ver todas</a>
+            <a href="/contracts">Ver todas</a>
         </div>
         <div class="donut-layout">
             <div class="chart-area donut"><canvas id="operatorChart"></canvas></div>
@@ -71,15 +71,15 @@
 
     <article class="panel reveal">
         <div class="panel-header">
-            <h2>Alertas críticos</h2>
-            <a href="#">Ver todos (12)</a>
+            <h2>Alertas criticos</h2>
+            <a href="#">Ver todos ({{ attention_rows|length }})</a>
         </div>
         <ul class="alert-list">
-            <li><span class="dot red"></span><div><strong>5 contratos vencem em até 15 dias</strong><small>Ação recomendada: Renovar contrato</small></div></li>
-            <li><span class="dot orange"></span><div><strong>3 contratos sem reajuste anual</strong><small>Ação recomendada: Revisar cláusulas</small></div></li>
-            <li><span class="dot orange"></span><div><strong>2 aditivos pendentes de assinatura</strong><small>Ação recomendada: Acompanhar assinatura</small></div></li>
-            <li><span class="dot blue"></span><div><strong>4 contratos com cláusulas críticas</strong><small>Ação recomendada: Revisar</small></div></li>
-            <li><span class="dot green"></span><div><strong>Documentos vencendo em 30 dias</strong><small>Ação recomendada: Atualizar documentos</small></div></li>
+            <li><span class="dot red"></span><div><strong>{{ metrics.expired }} contratos vencidos</strong><small>Acao recomendada: Renovar contrato</small></div></li>
+            <li><span class="dot orange"></span><div><strong>{{ metrics.due_30 }} contratos vencem em ate 30 dias</strong><small>Acao recomendada: Planejar renovacao</small></div></li>
+            <li><span class="dot orange"></span><div><strong>{{ metrics.no_adjustment }} contratos sem reajuste definido</strong><small>Acao recomendada: Revisar clausulas</small></div></li>
+            <li><span class="dot blue"></span><div><strong>{{ metrics.additive_count }} aditivos importados</strong><small>Acao recomendada: Acompanhar documentos</small></div></li>
+            <li><span class="dot green"></span><div><strong>{{ metrics.total_contracts + metrics.additive_count }} documentos cadastrados</strong><small>Contratos e aditivos importados</small></div></li>
         </ul>
     </article>
 </section>
@@ -107,50 +107,40 @@
             <a href="#">Ver todas</a>
         </div>
         <ol class="activity-list">
-            <li><time>Há 2 horas</time><strong>Aditivo assinado</strong><span>Unimed - Aditivo 03/2024 assinado</span></li>
-            <li><time>Há 4 horas</time><strong>Contrato adicionado</strong><span>Hapvida - CT-2024-0123</span></li>
-            <li><time>Há 8 horas</time><strong>Reajuste aplicado</strong><span>Bradesco Saúde - Reajuste anual (6,12%)</span></li>
-            <li><time>Há 1 dia</time><strong>Alerta resolvido</strong><span>Contrato SulAmérica renovado</span></li>
-            <li><time>Há 2 dias</time><strong>Documento vencido</strong><span>Amil - CNH vencida</span></li>
+            {% for activity in recent_activities %}
+            <li><time>{{ activity.date.strftime("%d/%m/%Y") }}</time><strong>{{ activity.title }}</strong><span>{{ activity.text }}</span></li>
+            {% else %}
+            <li><time>-</time><strong>Nenhuma atividade</strong><span>Importe contratos ou aditivos para preencher este painel.</span></li>
+            {% endfor %}
         </ol>
     </article>
 </section>
 
 <section class="dashboard-grid third-row">
     <article class="panel attention-panel reveal">
-        <div class="panel-header"><h2>Contratos que precisam de atenção</h2></div>
+        <div class="panel-header"><h2>Contratos que precisam de atencao</h2></div>
         <div class="table-wrap">
             <table class="attention-table">
                 <thead>
                     <tr>
                         <th>Contrato</th>
                         <th>Operadora</th>
-                        <th>Vigência</th>
+                        <th>Vigencia</th>
                         <th>Motivo</th>
-                        <th>Ação recomendada</th>
+                        <th>Acao recomendada</th>
                     </tr>
                 </thead>
                 <tbody id="contractsTable">
+                    {% for row in attention_rows %}
                     <tr>
-                        <td>CT-2024-0021</td><td>Unimed</td><td>15/06/2024</td>
-                        <td><span class="status-badge red">Vence em 3 dias</span></td><td>Renovar contrato</td>
+                        <td>{{ row.contract }}</td><td>{{ row.operator }}</td><td>{{ row.term }}</td>
+                        <td><span class="status-badge {{ row.badge }}">{{ row.reason }}</span></td><td>{{ row.action }}</td>
                     </tr>
+                    {% else %}
                     <tr>
-                        <td>CT-2024-0018</td><td>Amil</td><td>20/06/2024</td>
-                        <td><span class="status-badge orange">Sem reajuste anual</span></td><td>Revisar cláusulas</td>
+                        <td colspan="5">Nenhum contrato exige atencao no momento.</td>
                     </tr>
-                    <tr>
-                        <td>CT-2024-0033</td><td>Bradesco Saúde</td><td>28/06/2024</td>
-                        <td><span class="status-badge orange">Aditivo pendente</span></td><td>Acompanhar assinatura</td>
-                    </tr>
-                    <tr>
-                        <td>CT-2024-0042</td><td>SulAmérica</td><td>05/07/2024</td>
-                        <td><span class="status-badge blue">Documento vencendo</span></td><td>Atualizar documento</td>
-                    </tr>
-                    <tr>
-                        <td>CT-2024-0012</td><td>Hapvida</td><td>10/07/2024</td>
-                        <td><span class="status-badge yellow">Cláusula crítica</span></td><td>Revisar cláusula</td>
-                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
@@ -159,11 +149,11 @@
     <article class="panel score-panel reveal">
         <div class="panel-header"><h2>Score contratual por operadora</h2></div>
         <div class="score-list">
-            <div class="score-row"><span>Unimed</span><div><i style="width:90%"></i></div><strong>90/100</strong></div>
-            <div class="score-row"><span>Bradesco Saúde</span><div><i style="width:85%"></i></div><strong>85/100</strong></div>
-            <div class="score-row"><span>SulAmérica</span><div><i style="width:80%"></i></div><strong>80/100</strong></div>
-            <div class="score-row"><span>Amil</span><div><i style="width:75%"></i></div><strong>75/100</strong></div>
-            <div class="score-row"><span>Hapvida</span><div><i style="width:70%"></i></div><strong>70/100</strong></div>
+            {% for row in score_rows %}
+            <div class="score-row"><span>{{ row.operator }}</span><div><i style="width:{{ row.score }}%"></i></div><strong>{{ row.score }}/100</strong></div>
+            {% else %}
+            <div class="score-row"><span>Sem contratos</span><div><i style="width:0%"></i></div><strong>0/100</strong></div>
+            {% endfor %}
         </div>
         <div class="score-legend">
             <span>Excelente (90-100)</span>
@@ -177,5 +167,8 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="{{ url_for('static', path='js/dashboard.js') }}" defer></script>
+<script>
+    window.dashboardData = {{ dashboard_data|tojson }};
+</script>
+<script src="{{ url_for('static', path='js/dashboard.js') }}?v=20260527-live-dashboard" defer></script>
 {% endblock %}

@@ -17,7 +17,7 @@
             <b class="floating-badge">3</b>
         </button>
         <button class="primary-button compact js-new-aditivo" type="button">+ Novo aditivo</button>
-        <button class="secondary-action" type="button">Importar</button>
+        <button class="secondary-action js-new-aditivo" type="button">Importar</button>
         <button class="secondary-action" type="button">Exportar</button>
     </div>
 </header>
@@ -25,7 +25,7 @@
 <section class="contracts-metrics aditivos-metrics">
     <article class="metric-card reveal">
         <span class="metric-icon green">□</span>
-        <div><p>Total de aditivos</p><strong>56</strong><small>Todos os aditivos cadastrados</small></div>
+        <div><p>Total de aditivos</p><strong>{{ additive_count + 56 }}</strong><small>Todos os aditivos cadastrados</small></div>
     </article>
     <article class="metric-card reveal">
         <span class="metric-icon green">✓</span>
@@ -147,6 +147,19 @@
                         </tr>
                     </thead>
                     <tbody id="aditivosRows">
+                        {% for additive in additive_rows %}
+                        <tr data-aditivo="{{ additive.additive_number }}" data-contract="{{ additive.contract_number }}" data-operator="{{ additive.operator_name }}" data-type="{{ additive.additive_type }}" data-status="{{ additive.status_label }}" data-responsible="{{ additive.responsible_name }}" data-object="{{ additive.object_summary }}">
+                            <td><strong>{{ additive.additive_number }}</strong><small>Importado: {{ additive.original_filename }}</small></td>
+                            <td><strong>{{ additive.contract_number }}</strong><small>{{ additive.contract_name }}</small></td>
+                            <td><span class="operator-logo {{ additive.operator_logo_class }}">{{ additive.operator_initial }}</span><strong>{{ additive.operator_name }}</strong><small>Convênio do aditivo</small></td>
+                            <td><span class="type-pill reajuste">{{ additive.additive_type }}</span></td>
+                            <td><span>{{ additive.object_summary }}</span>{% if additive.reajust_index %}<small>Índice: {{ additive.reajust_index }}</small>{% endif %}</td>
+                            <td><span>{{ additive.start_date }} até {{ additive.end_date }}</span><small>Assinado em: {{ additive.signature_date }}</small></td>
+                            <td><span class="status-pill {{ additive.status_class }}">{{ additive.status_label }}</span></td>
+                            <td><strong>{{ additive.responsible_name }}</strong><small>{{ additive.responsible_role }}</small></td>
+                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
+                        </tr>
+                        {% endfor %}
                         <tr data-aditivo="AD-2024-0007" data-contract="CT-2024-0021" data-operator="Unimed" data-type="Reajuste" data-status="Ativo" data-responsible="Carlos Menezes" data-object="Reajuste anual de 6,12%">
                             <td><strong>AD-2024-0007</strong><small>Assinado em: 10/06/2024</small></td>
                             <td><strong>CT-2024-0021</strong><small>Hospital Santa Clara</small></td>
@@ -239,7 +252,7 @@
                 </table>
             </div>
             <footer class="table-footer">
-                <span id="aditivoTableCounter">Mostrando 1 a 8 de 56 aditivos</span>
+                <span id="aditivoTableCounter">Mostrando 1 a {{ additive_count + 8 }} de {{ additive_count + 8 }} aditivos</span>
                 <nav class="pagination" aria-label="Paginação">
                     <button type="button">Anterior</button>
                     <button class="active" type="button">1</button>
@@ -284,15 +297,57 @@
                 <button type="button">Pendentes de assinatura <b class="quick-badge danger">7</b></button>
                 <button type="button">Aditivos vencendo em 30 dias <b class="quick-badge warning">5</b></button>
                 <button type="button">Relatório de aditivos</button>
-                <button type="button">Importar aditivos</button>
+                <button class="js-new-aditivo" type="button">Importar aditivos</button>
                 <button type="button">Exportar aditivos</button>
             </div>
         </article>
     </aside>
 </section>
+
+<div class="contract-import-modal" id="aditivoImportModal" aria-hidden="true">
+    <div class="contract-import-card" role="dialog" aria-modal="true" aria-labelledby="aditivoImportTitle">
+        <button class="contract-import-close" id="closeAditivoImport" type="button" aria-label="Fechar">×</button>
+        <div class="contract-import-header">
+            <span class="metric-icon green">□</span>
+            <div>
+                <h2 id="aditivoImportTitle">Novo aditivo</h2>
+                <p>Importe o arquivo do aditivo e informe de qual convênio ele faz parte.</p>
+            </div>
+        </div>
+
+        <form id="aditivoImportForm" class="contract-import-form">
+            <input type="hidden" name="import_mode" value="additive">
+            <label class="contract-import-field" for="aditivoOperatorSelect">
+                <span>Convênio do aditivo</span>
+                <select id="aditivoOperatorSelect" name="operator_name" required>
+                    <option value="">Selecione o convênio do aditivo</option>
+                    {% for operator_name in operator_names %}
+                    <option value="{{ operator_name }}">{{ operator_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="contract-dropzone" id="aditivoDropzone" for="aditivoFileInput">
+                <input id="aditivoFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.jpg,.jpeg,.png,.tif,.tiff,image/*" hidden>
+                <span>⇧</span>
+                <strong>Arraste o arquivo do aditivo aqui ou clique para selecionar</strong>
+                <small>Formatos: PDF, DOCX, DOC, TXT, MD, JPG, PNG e TIFF. Imagens e PDFs digitalizados serão lidos com OCR.</small>
+            </label>
+            <div class="contract-import-file" id="aditivoImportFile">Nenhum arquivo selecionado</div>
+            <div class="contract-import-progress" id="aditivoImportProgress" aria-hidden="true">
+                <span><b id="aditivoImportProgressBar"></b></span>
+                <small id="aditivoImportProgressText">Importando aditivo...</small>
+            </div>
+            <div class="contract-import-message" id="aditivoImportMessage" role="status"></div>
+            <div class="contract-import-actions">
+                <button class="secondary-action" id="cancelAditivoImport" type="button">Cancelar</button>
+                <button class="primary-button compact" id="submitAditivoImport" type="submit">Importar aditivo</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="{{ url_for('static', path='js/aditivos.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/aditivos.js') }}?v=20260527-additive-import-mode" defer></script>
 {% endblock %}

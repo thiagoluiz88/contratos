@@ -1,13 +1,11 @@
 const chartColors = {
     green: "#00843D",
     greenDark: "#006B32",
-    greenLight: "#EAF8F0",
     red: "#EF4444",
     orange: "#F97316",
     yellow: "#FACC15",
     blue: "#3B82F6",
     purple: "#7C3AED",
-    muted: "#E5E7EB",
 };
 
 const centerTextPlugin = {
@@ -39,7 +37,7 @@ function buildLegend(elementId, labels, values, percentages, colors) {
     element.innerHTML = labels.map((label, index) => `
         <li>
             <span class="legend-name">
-                <i class="legend-dot" style="background:${colors[index]}"></i>
+                <i class="legend-dot" style="background:${colors[index % colors.length]}"></i>
                 ${label}
             </span>
             <strong>${values[index]} (${percentages[index]}%)</strong>
@@ -47,17 +45,32 @@ function buildLegend(elementId, labels, values, percentages, colors) {
     `).join("");
 }
 
-function makeDoughnut(canvasId, legendId, labels, values, percentages, colors, total) {
+function chartDataset(name, fallbackLabels, fallbackValues) {
+    const dataset = window.dashboardData?.[name] || {};
+    const labels = dataset.labels?.length ? dataset.labels : fallbackLabels;
+    const values = dataset.values?.length ? dataset.values : fallbackValues;
+    const total = typeof dataset.total === "number"
+        ? dataset.total
+        : values.reduce((sum, value) => sum + Number(value || 0), 0);
+    const percentages = values.map((value) => {
+        if (!total) return 0;
+        return Math.round((Number(value || 0) / total) * 100);
+    });
+
+    return { labels, values, percentages, total };
+}
+
+function makeDoughnut(canvasId, legendId, dataset, colors) {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !window.Chart) return;
 
     new Chart(canvas, {
         type: "doughnut",
         data: {
-            labels,
+            labels: dataset.labels,
             datasets: [{
-                data: values,
-                backgroundColor: colors,
+                data: dataset.values,
+                backgroundColor: dataset.labels.map((_, index) => colors[index % colors.length]),
                 borderColor: "#FFFFFF",
                 borderWidth: 4,
                 hoverOffset: 6,
@@ -72,30 +85,35 @@ function makeDoughnut(canvasId, legendId, labels, values, percentages, colors, t
                 tooltip: {
                     callbacks: {
                         label(context) {
-                            return `${context.label}: ${context.raw} (${percentages[context.dataIndex]}%)`;
+                            return `${context.label}: ${context.raw} (${dataset.percentages[context.dataIndex]}%)`;
                         },
                     },
                 },
-                centerText: { text: String(total), label: "Total" },
+                centerText: { text: String(dataset.total), label: "Total" },
             },
         },
         plugins: [centerTextPlugin],
     });
 
-    buildLegend(legendId, labels, values, percentages, colors);
+    buildLegend(legendId, dataset.labels, dataset.values, dataset.percentages, colors);
 }
 
 function renderExpirationChart() {
     const canvas = document.getElementById("expirationChart");
     if (!canvas || !window.Chart) return;
+    const expiration = chartDataset(
+        "expiration",
+        ["Vencidos", "Ate 30 dias", "31 a 60 dias", "61 a 90 dias", "91 a 120 dias", "121 a 150 dias", "+150 dias"],
+        [0, 0, 0, 0, 0, 0, 0],
+    );
 
     new Chart(canvas, {
         type: "bar",
         data: {
-            labels: ["Vencidos", "Até 30 dias", "31 a 60 dias", "61 a 90 dias", "91 a 120 dias", "121 a 150 dias", "+150 dias"],
+            labels: expiration.labels,
             datasets: [{
                 label: "Contratos",
-                data: [7, 15, 28, 34, 22, 12, 10],
+                data: expiration.values,
                 borderRadius: 10,
                 backgroundColor: chartColors.green,
                 hoverBackgroundColor: chartColors.greenDark,
@@ -147,7 +165,7 @@ function setupSearch() {
 function setupActions() {
     const button = document.getElementById("newContractButton");
     button?.addEventListener("click", () => {
-        alert("Fluxo de novo contrato pronto para conectar em /contracts/new.");
+        window.location.href = "/contracts?newContract=1";
     });
 }
 
@@ -157,31 +175,22 @@ function renderCharts() {
     makeDoughnut(
         "operatorChart",
         "operatorLegend",
-        ["Unimed", "Amil", "Bradesco Saúde", "SulAmérica", "Hapvida", "Outras"],
-        [32, 24, 18, 16, 14, 24],
-        [25, 19, 14, 12, 11, 19],
+        chartDataset("operators", ["Sem contratos"], [0]),
         [chartColors.green, chartColors.blue, chartColors.purple, chartColors.orange, chartColors.red, "#94A3B8"],
-        128,
     );
 
     makeDoughnut(
         "statusChart",
         "statusLegend",
-        ["Ativos", "Vencendo", "Vencidos", "Suspensos", "Rescindidos", "Em negociação"],
-        [128, 15, 7, 10, 8, 20],
-        [68, 8, 4, 5, 4, 11],
+        chartDataset("status", ["Sem contratos"], [0]),
         [chartColors.green, chartColors.orange, chartColors.red, chartColors.blue, chartColors.purple, "#94A3B8"],
-        128,
     );
 
     makeDoughnut(
         "tableTypeChart",
         "tableTypeLegend",
-        ["CBHPM", "Tabela própria", "SIMPRO", "Brasíndice", "Outras"],
-        [52, 28, 18, 12, 18],
-        [41, 22, 14, 9, 14],
+        chartDataset("tables", ["Nao identificada"], [0]),
         [chartColors.green, chartColors.blue, chartColors.purple, chartColors.orange, "#94A3B8"],
-        128,
     );
 }
 
