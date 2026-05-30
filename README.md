@@ -49,6 +49,28 @@ Instale as dependÃªncias:
 python -m pip install -r requirements.txt
 ```
 
+Configure o PostgreSQL local no arquivo `.env`:
+
+```text
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=contratos_db
+DB_USER=postgres
+DB_PASSWORD=sua_senha_local
+```
+
+Crie as tabelas:
+
+```powershell
+python -m app.init_db
+```
+
+Ou aplique migrations com Alembic:
+
+```powershell
+python -m alembic upgrade head
+```
+
 Execute o servidor:
 
 ```powershell

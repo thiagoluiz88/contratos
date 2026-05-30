@@ -4,6 +4,9 @@ jinja2
 python-multipart
 itsdangerous
 SQLAlchemy
+alembic
+psycopg2-binary
+python-dotenv
 pdfplumber
 pytesseract
 python-docx

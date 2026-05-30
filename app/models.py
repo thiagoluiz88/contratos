@@ -1,9 +1,22 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, Text, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, Numeric, Text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+
+
+class AccessProfile(Base):
+    __tablename__ = "access_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    users: Mapped[list["User"]] = relationship(back_populates="access_profile")
 
 
 class Operator(Base):
@@ -117,6 +130,85 @@ class Contract(Base):
     analyses: Mapped[list["AIAnalysis"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     clauses: Mapped[list["ContractClause"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     events: Mapped[list["ContractEvent"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
+    adjustments: Mapped[list["ContractAdjustment"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
+    remuneration_tables: Mapped[list["RemunerationTable"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
+    materials_medicines_rules: Mapped[list["MaterialsMedicinesRule"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
+
+
+class ContractAdjustment(Base):
+    __tablename__ = "contract_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    reference_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    adjustment_index: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    applied_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    requested_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    request_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    approval_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending", index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contract: Mapped[Contract] = relationship(back_populates="adjustments")
+
+
+class RemunerationTable(Base):
+    __tablename__ = "remuneration_tables"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    table_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    reference_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contract: Mapped[Contract] = relationship(back_populates="remuneration_tables")
+    items: Mapped[list["RemunerationTableItem"]] = relationship(back_populates="remuneration_table", cascade="all, delete-orphan")
+
+
+class RemunerationTableItem(Base):
+    __tablename__ = "remuneration_table_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    remuneration_table_id: Mapped[int] = mapped_column(ForeignKey("remuneration_tables.id", ondelete="CASCADE"), nullable=False, index=True)
+    code: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    current_value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    proposed_value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    adjustment_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    billing_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    remuneration_table: Mapped[RemunerationTable] = relationship(back_populates="items")
+
+
+class MaterialsMedicinesRule(Base):
+    __tablename__ = "materials_medicines_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    billing_reference: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    addition_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    reduction_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    rule_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contract: Mapped[Contract] = relationship(back_populates="materials_medicines_rules")
 
 
 class ContractEvent(Base):
@@ -278,6 +370,25 @@ class NegotiationOpportunity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     analysis: Mapped[AIAnalysis] = relationship(back_populates="opportunities")
+    messages: Mapped[list["NegotiationMessage"]] = relationship(back_populates="negotiation_opportunity", cascade="all, delete-orphan")
+
+
+class NegotiationMessage(Base):
+    __tablename__ = "negotiation_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    negotiation_opportunity_id: Mapped[int] = mapped_column(ForeignKey("negotiation_opportunities.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    message_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    channel: Mapped[str] = mapped_column(String(50), default="other", index=True)
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    contract_file_id: Mapped[int | None] = mapped_column(ForeignKey("contract_files.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    negotiation_opportunity: Mapped[NegotiationOpportunity] = relationship(back_populates="messages")
+    user: Mapped["User | None"] = relationship(back_populates="negotiation_messages")
+    contract_file: Mapped["ContractFile | None"] = relationship()
 
 
 class ContractComparison(Base):
@@ -313,6 +424,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    access_profile_id: Mapped[int | None] = mapped_column(ForeignKey("access_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -320,3 +432,6 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    access_profile: Mapped[AccessProfile | None] = relationship(back_populates="users")
+    negotiation_messages: Mapped[list[NegotiationMessage]] = relationship(back_populates="user")
