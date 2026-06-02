@@ -47,7 +47,9 @@
             </label>
             <div class="full additional-actions">
                 <button class="secondary-action" type="button" onclick="window.location.href='/contracts'">Cancelar</button>
+                {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
                 <button class="primary-button compact" type="submit">Salvar cadastro</button>
+                {% endif %}
             </div>
         </form>
     </article>

@@ -21,35 +21,37 @@
                 </span>
                 <span>
                     <strong>Contracts Intelligence</strong>
-                    <small>Gestão de Contratos</small>
+                    <small>Analise de Contratos Hospitalares</small>
                 </span>
             </a>
 
             <nav class="side-nav">
-                <a class="nav-item {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard"><span>▣</span>Painel Executivo</a>
-                <a class="nav-item {% if active_page == 'contracts' %}active{% endif %}" href="/contracts"><span>▤</span>Contratos</a>
-                <a class="nav-item {% if active_page == 'aditivos' %}active{% endif %}" href="/aditivos"><span>✚</span>Aditivos</a>
-                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>✦</span>Análises por IA</a>
-                <a class="nav-item {% if active_page == 'comparacoes' %}active{% endif %}" href="/comparacoes"><span>⇄</span>Comparações</a>
-                <a class="nav-item" href="#"><span>!</span>Alertas <b class="badge danger">12</b></a>
-                <a class="nav-item" href="#"><span>▥</span>Relatórios</a>
-                <a class="nav-item" href="#"><span>↧</span>Exportações</a>
-                <a class="nav-item" href="#"><span>◇</span>Operadoras</a>
-                <a class="nav-item" href="#"><span>⌘</span>Categorias</a>
-                <a class="nav-item" href="#"><span>◎</span>Metas</a>
-                <a class="nav-item" href="#"><span>⚙</span>Configurações</a>
+                <a class="nav-item {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard"><span>D</span>Painel Executivo</a>
+                <a class="nav-item {% if active_page == 'contracts' %}active{% endif %}" href="/contracts"><span>C</span>Contratos</a>
+                {% if has_profile(user, AUDIT_PROFILES) %}
+                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>I</span>Analises por IA</a>
+                <a class="nav-item {% if active_page == 'auth_audit_events' %}active{% endif %}" href="/auth-audit-events"><span>L</span>Auditoria</a>
+                {% endif %}
+                {% if has_profile(user, FINANCIAL_PROFILES) %}
+                <a class="nav-item {% if active_page == 'comparacoes' %}active{% endif %}" href="/comparacoes"><span>F</span>Comparacoes</a>
+                {% endif %}
+                {% if has_profile(user, ADMIN_PROFILES) %}
+                <a class="nav-item {% if active_page == 'users' %}active{% endif %}" href="/users"><span>U</span>Usuarios</a>
+                <a class="nav-item {% if active_page == 'access_profiles' %}active{% endif %}" href="/access-profiles"><span>P</span>Perfis</a>
+                {% endif %}
+                <a class="nav-item {% if active_page == 'change_password' %}active{% endif %}" href="/change-password"><span>S</span>Trocar senha</a>
             </nav>
 
             <div class="sidebar-footer">
                 <div class="help-card">
                     <strong>Central de Ajuda</strong>
-                    <p>Tire dúvidas e veja orientações</p>
+                    <p>Tire duvidas e veja orientacoes</p>
                 </div>
                 <div class="user-card">
-                    <span class="avatar">AM</span>
+                    <span class="avatar">{{ (user.name or user.username or "U")[:2].upper() if user else "U" }}</span>
                     <span>
-                        <strong>Allan Martins</strong>
-                        <small>Administrador</small>
+                        <strong>{{ user.name or user.username if user else "Usuario" }}</strong>
+                        <small>{{ user.role if user else "Sem perfil" }}</small>
                     </span>
                 </div>
             </div>

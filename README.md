@@ -1,6 +1,6 @@
 # Contracts Intelligence
 
-Projeto FastAPI com login local e dashboard "Painel Executivo" para gestÃ£o de contratos com operadoras de saÃºde.
+Projeto FastAPI com login local e dashboard "Painel Executivo" para gestao de contratos com operadoras de saude.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Projeto FastAPI com login local e dashboard "Painel Executivo" para gestÃ£o de
 - Jinja2
 - HTML, CSS e JavaScript puro
 - Chart.js
-- SessÃµes com `SessionMiddleware`
+- Sessoes com `SessionMiddleware`
 
 ## Estrutura
 
@@ -43,7 +43,7 @@ Ative o ambiente:
 .\.venv\Scripts\Activate.ps1
 ```
 
-Instale as dependÃªncias:
+Instale as dependencias:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -83,9 +83,9 @@ Acesse:
 http://127.0.0.1:8000/login
 ```
 
-## Login padrÃ£o
+## Login inicial
 
-- usuÃ¡rio: `admin`
-- senha: `admin123`
+A migration de autenticacao cria o usuario administrador inicial `admin` com senha armazenada em hash bcrypt.
+Altere a senha inicial antes de usar o sistema em producao.
 
-ApÃ³s login correto, o sistema redireciona para `/dashboard`.
+Apos login correto, o sistema redireciona para `/dashboard`.

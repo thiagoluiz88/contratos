@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <span class="eyebrow">Seguranca</span>
+        <h1>Auditoria</h1>
+        <p>Eventos de autenticacao, usuarios, perfis e senhas.</p>
+    </div>
+</section>
+
+<section class="content-section">
+    <form class="filters-grid audit-filters" method="get" action="/auth-audit-events">
+        <label class="filter-field">
+            <span>Usuario</span>
+            <input name="username" value="{{ filters.username }}" placeholder="usuario ou parte do nome">
+        </label>
+        <label class="filter-field">
+            <span>Evento</span>
+            <select name="event_type">
+                <option value="">Todos</option>
+                {% for item in event_types %}
+                <option value="{{ item }}" {% if filters.event_type == item %}selected{% endif %}>{{ item }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="filter-field">
+            <span>Data inicial</span>
+            <input name="start_date" type="date" value="{{ filters.start_date }}">
+        </label>
+        <label class="filter-field">
+            <span>Data final</span>
+            <input name="end_date" type="date" value="{{ filters.end_date }}">
+        </label>
+        <button class="primary-button compact" type="submit">Filtrar</button>
+        <a class="secondary-action" href="/auth-audit-events">Limpar</a>
+    </form>
+
+    <div class="admin-table-card">
+        <table class="contracts-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Usuario</th>
+                    <th>Evento</th>
+                    <th>Origem</th>
+                    <th>Detalhes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr>
+                    <td><strong>{{ event.created_at.strftime("%d/%m/%Y") }}</strong><small>{{ event.created_at.strftime("%H:%M:%S") }}</small></td>
+                    <td>{{ event.username or "-" }}</td>
+                    <td><span class="status-pill {{ 'active' if event.success else 'expired' }}">{{ event.event_type }}</span></td>
+                    <td><strong>{{ event.ip_address or "-" }}</strong><small>{{ event.user_agent or "-" }}</small></td>
+                    <td>{{ event.notes or "-" }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5">Nenhum evento encontrado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

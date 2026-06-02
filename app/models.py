@@ -225,6 +225,22 @@ class ContractEvent(Base):
     contract: Mapped[Contract] = relationship(back_populates="events")
 
 
+class AuthAuditEvent(Base):
+    __tablename__ = "auth_audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    user: Mapped["User | None"] = relationship(back_populates="auth_audit_events")
+
+
 class ImportedContractRecord(Base):
     __tablename__ = "imported_contract_records"
 
@@ -435,3 +451,4 @@ class User(Base):
 
     access_profile: Mapped[AccessProfile | None] = relationship(back_populates="users")
     negotiation_messages: Mapped[list[NegotiationMessage]] = relationship(back_populates="user")
+    auth_audit_events: Mapped[list[AuthAuditEvent]] = relationship(back_populates="user")

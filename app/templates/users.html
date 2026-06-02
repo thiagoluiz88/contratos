@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <span class="eyebrow">Administracao</span>
+        <h1>Usuarios</h1>
+        <p>Gerencie acessos, perfis e status dos usuarios.</p>
+    </div>
+    <a class="primary-button compact" href="/users/new">Novo usuario</a>
+</section>
+
+<section class="content-section">
+    <div class="admin-table-card">
+        <table class="contracts-table">
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Email</th>
+                    <th>Perfil</th>
+                    <th>Status</th>
+                    <th>Acoes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in users %}
+                <tr>
+                    <td><strong>{{ item.username }}</strong><small>{{ item.full_name or "-" }}</small></td>
+                    <td>{{ item.email }}</td>
+                    <td>{{ item.profile }}</td>
+                    <td><span class="status-pill {{ 'active' if item.is_active else 'suspended' }}">{{ "Ativo" if item.is_active else "Inativo" }}</span></td>
+                    <td class="admin-actions">
+                        <a class="secondary-action" href="/users/{{ item.id }}/edit">Editar</a>
+                        <a class="secondary-action" href="/users/{{ item.id }}/reset-password">Resetar senha</a>
+                        {% if item.is_active %}
+                        <form method="post" action="/users/{{ item.id }}/deactivate">
+                            <button class="secondary-action danger-action" type="submit">Desativar</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

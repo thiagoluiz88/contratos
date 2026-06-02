@@ -12,3 +12,4 @@ pytesseract
 python-docx
 pdf2image
 pillow
+bcrypt

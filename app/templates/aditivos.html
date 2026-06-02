@@ -1,5 +1,18 @@
 {% extends "base.html" %}
 
+{% block head %}
+{% if not has_profile(user, CONTRACT_WRITE_PROFILES) %}
+<style>
+    .js-new-aditivo,
+    .row-actions button[data-action="edit"],
+    .row-actions button[data-action="more"],
+    #aditivoImportModal {
+        display: none !important;
+    }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <header class="topbar contracts-topbar">
     <div>
@@ -16,9 +29,10 @@
             <span>!</span>
             <b class="floating-badge">3</b>
         </button>
+        {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
         <button class="primary-button compact js-new-aditivo" type="button">+ Novo aditivo</button>
         <button class="secondary-action js-new-aditivo" type="button">Importar</button>
-        <button class="secondary-action" type="button">Exportar</button>
+        {% endif %}
     </div>
 </header>
 
@@ -304,6 +318,7 @@
     </aside>
 </section>
 
+{% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
 <div class="contract-import-modal" id="aditivoImportModal" aria-hidden="true">
     <div class="contract-import-card" role="dialog" aria-modal="true" aria-labelledby="aditivoImportTitle">
         <button class="contract-import-close" id="closeAditivoImport" type="button" aria-label="Fechar">×</button>
@@ -345,6 +360,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

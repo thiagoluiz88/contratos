@@ -1,19 +1,15 @@
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime, time
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlalchemy import or_
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import (
-    APP_PASSWORD,
-    APP_USER,
-    APP_USER_EMAIL,
-    APP_USER_NAME,
-    APP_USER_ROLE,
     SESSION_HTTPS_ONLY,
     SESSION_SECRET,
     STATIC_DIR,
@@ -21,19 +17,26 @@ from .config import (
     UPLOAD_DIR,
 )
 from .database import SessionLocal, init_db
-from .models import Contract, ContractAdditive, ContractFile, ImportBatch, Operator
+from .models import AccessProfile, AuthAuditEvent, Contract, ContractAdditive, ContractFile, ImportBatch, Operator, User
+from .services.auth import (
+    ADMIN_PROFILES,
+    AUDIT_PROFILES,
+    CONTRACT_WRITE_PROFILES,
+    DEFAULT_REGISTER_PROFILE,
+    FINANCIAL_PROFILES,
+    PROFILE_ADMIN,
+    ensure_initial_admin,
+    get_access_profile,
+    has_profile,
+    hash_password,
+    record_auth_event,
+    upgrade_legacy_password_hashes,
+    user_session_payload,
+    validate_password_strength,
+    verify_password,
+)
 from .services.ai_analysis import build_contract_analysis, persist_contract_analysis
 from .services.uploads import UnsupportedUploadError, append_warning, prepare_contract_upload
-
-
-USERS = {
-    APP_USER: {
-        "password": APP_PASSWORD,
-        "name": APP_USER_NAME,
-        "role": APP_USER_ROLE,
-        "email": APP_USER_EMAIL,
-    }
-}
 
 
 app = FastAPI(title="Contracts Intelligence")
@@ -46,6 +49,11 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+templates.env.globals["has_profile"] = has_profile
+templates.env.globals["ADMIN_PROFILES"] = ADMIN_PROFILES
+templates.env.globals["AUDIT_PROFILES"] = AUDIT_PROFILES
+templates.env.globals["CONTRACT_WRITE_PROFILES"] = CONTRACT_WRITE_PROFILES
+templates.env.globals["FINANCIAL_PROFILES"] = FINANCIAL_PROFILES
 SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 DEFAULT_OPERATOR_NAMES = [
     "Amil",
@@ -114,6 +122,16 @@ def latest_contract_analysis_context(contract_id: int | None = None):
 def on_startup():
     try:
         init_db()
+        db = SessionLocal()
+        try:
+            ensure_initial_admin(db)
+            upgrade_legacy_password_hashes(db)
+            db.commit()
+        except SQLAlchemyError as exc:
+            db.rollback()
+            print(f"Aviso: nao foi possivel garantir usuario administrador inicial: {exc}")
+        finally:
+            db.close()
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     except OperationalError as exc:
         print(f"Aviso: nÃƒÂ£o foi possÃƒÂ­vel inicializar o banco automaticamente: {exc}")
@@ -132,6 +150,69 @@ def require_login(request: Request):
     if not is_logged_in(request):
         return RedirectResponse("/login", status_code=303)
     return None
+
+
+def forbidden_response(request: Request, message: str = "Acesso negado."):
+    wants_json = "application/json" in request.headers.get("accept", "").lower()
+    if wants_json:
+        return JSONResponse({"error": message}, status_code=403)
+    return templates.TemplateResponse(
+        request,
+        "forbidden.html",
+        {
+            "title": "Acesso negado",
+            "active_page": None,
+            "user": request.session.get("user"),
+            "message": message,
+        },
+        status_code=403,
+    )
+
+
+def require_profiles(request: Request, allowed_profiles: set[str], message: str = "Acesso negado."):
+    if redirect := require_login(request):
+        return redirect
+    if not has_profile(request.session.get("user"), allowed_profiles):
+        return forbidden_response(request, message)
+    return None
+
+
+def current_username(request: Request) -> str | None:
+    return request.session.get("user", {}).get("username")
+
+
+def active_admin_count(db) -> int:
+    return (
+        db.query(User)
+        .join(AccessProfile)
+        .filter(User.is_active.is_(True), AccessProfile.name == PROFILE_ADMIN, AccessProfile.is_active.is_(True))
+        .count()
+    )
+
+
+def render_user_form(
+    request: Request,
+    *,
+    user_record: User | None = None,
+    profiles=None,
+    error: str | None = None,
+    reset_password: bool = False,
+    status_code: int = 200,
+):
+    return templates.TemplateResponse(
+        request,
+        "user_form.html",
+        {
+            "title": "Resetar senha" if reset_password else ("Editar usuario" if user_record else "Novo usuario"),
+            "active_page": "users",
+            "user": request.session.get("user"),
+            "user_record": user_record,
+            "profiles": profiles or [],
+            "error": error,
+            "reset_password": reset_password,
+        },
+        status_code=status_code,
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -153,15 +234,37 @@ def login_submit(
     password: str = Form(...),
     remember: str | None = Form(default=None),
 ):
-    user = USERS.get(username)
-    if user and user["password"] == password:
-        request.session["user"] = {
-            "username": username,
-            "name": user["name"],
-            "role": user["role"],
-        }
-        request.session["remember"] = bool(remember)
-        return RedirectResponse("/dashboard", status_code=303)
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        valid_user = (
+            user
+            and user.is_active
+            and (user.access_profile is None or user.access_profile.is_active)
+            and verify_password(password, user.password_hash)
+        )
+        if valid_user:
+            request.session["user"] = user_session_payload(user)
+            request.session["remember"] = bool(remember)
+            record_auth_event(db, "login", user=user, request=request, success=True)
+            db.commit()
+            return RedirectResponse("/dashboard", status_code=303)
+
+        record_auth_event(
+            db,
+            "login_failed",
+            user=user if user else None,
+            username=username,
+            request=request,
+            success=False,
+            notes="Usuario inativo, perfil inativo ou credenciais invalidas.",
+        )
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
     return templates.TemplateResponse(
         request,
@@ -213,11 +316,17 @@ def register_submit(
         "email": email,
     }
 
-    if username in USERS:
+    db = SessionLocal()
+    try:
+        existing_user = db.query(User).filter((User.username == username) | (User.email == email)).first()
+    finally:
+        db.close()
+
+    if existing_user:
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": "Este usuario ja existe."},
+            {**context, "error": "Este usuario ou email ja existe."},
             status_code=400,
         )
 
@@ -229,11 +338,12 @@ def register_submit(
             status_code=400,
         )
 
-    if len(password) < 6:
+    password_error = validate_password_strength(password)
+    if password_error:
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": "A senha deve ter pelo menos 6 caracteres."},
+            {**context, "error": password_error},
             status_code=400,
         )
 
@@ -245,22 +355,539 @@ def register_submit(
             status_code=400,
         )
 
-    USERS[username] = {
-        "password": password,
-        "name": full_name,
-        "role": "Administrador",
-        "email": email,
+    db = SessionLocal()
+    try:
+        profile = get_access_profile(db, DEFAULT_REGISTER_PROFILE) or get_access_profile(db, "Administrator")
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            access_profile_id=profile.id if profile else None,
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+        request.session["user"] = user_session_payload(user)
+        record_auth_event(db, "register", user=user, request=request, success=True)
+        record_auth_event(db, "login", user=user, request=request, success=True, notes="Login automatico apos cadastro.")
+        db.commit()
+        return RedirectResponse("/dashboard", status_code=303)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {**context, "error": f"Nao foi possivel criar o usuario: {exc}"},
+            status_code=500,
+        )
+    finally:
+        db.close()
+
+
+@app.get("/change-password", response_class=HTMLResponse)
+def change_password_page(request: Request):
+    if redirect := require_login(request):
+        return redirect
+
+    return templates.TemplateResponse(
+        request,
+        "change_password.html",
+        {
+            "title": "Trocar senha",
+            "active_page": "change_password",
+            "user": request.session.get("user"),
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@app.post("/change-password", response_class=HTMLResponse)
+def change_password_submit(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...),
+):
+    if redirect := require_login(request):
+        return redirect
+
+    context = {
+        "title": "Trocar senha",
+        "active_page": "change_password",
+        "user": request.session.get("user"),
+        "error": None,
+        "success": None,
     }
-    request.session["user"] = {
-        "username": username,
-        "name": full_name,
-        "role": "Administrador",
-    }
-    return RedirectResponse("/dashboard", status_code=303)
+    password_error = validate_password_strength(new_password)
+    if password_error:
+        return templates.TemplateResponse(
+            request,
+            "change_password.html",
+            {**context, "error": password_error},
+            status_code=400,
+        )
+    if new_password != new_password_confirm:
+        return templates.TemplateResponse(
+            request,
+            "change_password.html",
+            {**context, "error": "As senhas nao conferem."},
+            status_code=400,
+        )
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == current_username(request)).first()
+        if not user or not verify_password(current_password, user.password_hash):
+            record_auth_event(
+                db,
+                "password_change_failed",
+                user=user,
+                username=current_username(request),
+                request=request,
+                success=False,
+                notes="Senha atual invalida.",
+            )
+            db.commit()
+            return templates.TemplateResponse(
+                request,
+                "change_password.html",
+                {**context, "error": "Senha atual invalida."},
+                status_code=400,
+            )
+
+        user.password_hash = hash_password(new_password)
+        request.session["user"] = user_session_payload(user)
+        record_auth_event(db, "password_changed", user=user, request=request, success=True)
+        db.commit()
+        return templates.TemplateResponse(
+            request,
+            "change_password.html",
+            {**context, "user": request.session.get("user"), "success": "Senha alterada com sucesso."},
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "change_password.html",
+            {**context, "error": f"Nao foi possivel alterar a senha: {exc}"},
+            status_code=500,
+        )
+    finally:
+        db.close()
+
+
+@app.get("/users", response_class=HTMLResponse)
+def users_page(request: Request):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem gerenciar usuarios."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_rows = [
+            {
+                "id": item.id,
+                "username": item.username,
+                "email": item.email,
+                "full_name": item.full_name,
+                "is_active": item.is_active,
+                "profile": item.access_profile.name if item.access_profile else "-",
+                "created_at": item.created_at,
+            }
+            for item in db.query(User).order_by(User.created_at.desc()).all()
+        ]
+        return templates.TemplateResponse(
+            request,
+            "users.html",
+            {
+                "title": "Usuarios",
+                "active_page": "users",
+                "user": request.session.get("user"),
+                "users": user_rows,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/users/new", response_class=HTMLResponse)
+def user_new_page(request: Request):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar usuarios."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        return render_user_form(request, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all())
+    finally:
+        db.close()
+
+
+@app.post("/users/new", response_class=HTMLResponse)
+def user_new_submit(
+    request: Request,
+    username: str = Form(...),
+    full_name: str = Form(default=""),
+    email: str = Form(...),
+    access_profile_id: int = Form(...),
+    password: str = Form(...),
+    is_active: str | None = Form(default=None),
+):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar usuarios."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        profiles = db.query(AccessProfile).order_by(AccessProfile.name).all()
+        profile = db.query(AccessProfile).filter(AccessProfile.id == access_profile_id).first()
+        if not profile:
+            return render_user_form(request, profiles=profiles, error="Perfil obrigatorio.", status_code=400)
+        if db.query(User).filter(or_(User.username == username, User.email == email)).first():
+            return render_user_form(request, profiles=profiles, error="Usuario ou email ja existe.", status_code=400)
+        password_error = validate_password_strength(password)
+        if password_error:
+            return render_user_form(request, profiles=profiles, error=password_error, status_code=400)
+
+        user_record = User(
+            username=username.strip(),
+            full_name=full_name.strip() or None,
+            email=email.strip(),
+            access_profile_id=access_profile_id,
+            password_hash=hash_password(password),
+            is_active=bool(is_active),
+        )
+        db.add(user_record)
+        db.flush()
+        record_auth_event(db, "user_created", user=user_record, username=user_record.username, request=request, notes=f"Criado por {current_username(request)}.")
+        db.commit()
+        return RedirectResponse("/users", status_code=303)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return render_user_form(request, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all(), error=f"Nao foi possivel criar usuario: {exc}", status_code=500)
+    finally:
+        db.close()
+
+
+@app.get("/users/{user_id}/edit", response_class=HTMLResponse)
+def user_edit_page(request: Request, user_id: int):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar usuarios."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_record = db.query(User).filter(User.id == user_id).first()
+        if not user_record:
+            return RedirectResponse("/users", status_code=303)
+        return render_user_form(request, user_record=user_record, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all())
+    finally:
+        db.close()
+
+
+@app.post("/users/{user_id}/edit", response_class=HTMLResponse)
+def user_edit_submit(
+    request: Request,
+    user_id: int,
+    full_name: str = Form(default=""),
+    email: str = Form(...),
+    access_profile_id: int = Form(...),
+    is_active: str | None = Form(default=None),
+):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar usuarios."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_record = db.query(User).filter(User.id == user_id).first()
+        profiles = db.query(AccessProfile).order_by(AccessProfile.name).all()
+        if not user_record:
+            return RedirectResponse("/users", status_code=303)
+        if not db.query(AccessProfile).filter(AccessProfile.id == access_profile_id).first():
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Perfil obrigatorio.", status_code=400)
+        duplicate = db.query(User).filter(User.email == email, User.id != user_id).first()
+        if duplicate:
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Email ja cadastrado.", status_code=400)
+        if user_record.id == request.session.get("user", {}).get("id") and not is_active:
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Voce nao pode desativar o proprio usuario.", status_code=400)
+
+        old_profile_id = user_record.access_profile_id
+        user_record.full_name = full_name.strip() or None
+        user_record.email = email.strip()
+        user_record.access_profile_id = access_profile_id
+        user_record.is_active = bool(is_active)
+        if old_profile_id != access_profile_id and active_admin_count(db) == 0:
+            db.rollback()
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Nao e permitido remover o ultimo Administrator ativo.", status_code=400)
+
+        record_auth_event(db, "user_updated", user=user_record, username=user_record.username, request=request, notes=f"Atualizado por {current_username(request)}.")
+        db.commit()
+        return RedirectResponse("/users", status_code=303)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return render_user_form(request, error=f"Nao foi possivel editar usuario: {exc}", status_code=500)
+    finally:
+        db.close()
+
+
+@app.post("/users/{user_id}/deactivate")
+def user_deactivate(request: Request, user_id: int):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem desativar usuarios."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_record = db.query(User).filter(User.id == user_id).first()
+        if not user_record:
+            return RedirectResponse("/users", status_code=303)
+        if user_record.id == request.session.get("user", {}).get("id"):
+            return forbidden_response(request, "Voce nao pode desativar o proprio usuario.")
+        if user_record.access_profile and user_record.access_profile.name == PROFILE_ADMIN and active_admin_count(db) <= 1:
+            return forbidden_response(request, "Nao e permitido desativar o ultimo Administrator ativo.")
+        user_record.is_active = False
+        record_auth_event(db, "user_deactivated", user=user_record, username=user_record.username, request=request, notes=f"Desativado por {current_username(request)}.")
+        db.commit()
+        return RedirectResponse("/users", status_code=303)
+    finally:
+        db.close()
+
+
+@app.get("/users/{user_id}/reset-password", response_class=HTMLResponse)
+def user_reset_password_page(request: Request, user_id: int):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem resetar senhas."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_record = db.query(User).filter(User.id == user_id).first()
+        if not user_record:
+            return RedirectResponse("/users", status_code=303)
+        return render_user_form(request, user_record=user_record, reset_password=True)
+    finally:
+        db.close()
+
+
+@app.post("/users/{user_id}/reset-password", response_class=HTMLResponse)
+def user_reset_password_submit(
+    request: Request,
+    user_id: int,
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem resetar senhas."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_record = db.query(User).filter(User.id == user_id).first()
+        if not user_record:
+            return RedirectResponse("/users", status_code=303)
+        password_error = validate_password_strength(password)
+        if password_error:
+            return render_user_form(request, user_record=user_record, reset_password=True, error=password_error, status_code=400)
+        if password != password_confirm:
+            return render_user_form(request, user_record=user_record, reset_password=True, error="As senhas nao conferem.", status_code=400)
+        user_record.password_hash = hash_password(password)
+        record_auth_event(db, "password_reset", user=user_record, username=user_record.username, request=request, notes=f"Reset por {current_username(request)}.")
+        db.commit()
+        return RedirectResponse("/users", status_code=303)
+    finally:
+        db.close()
+
+
+@app.get("/access-profiles", response_class=HTMLResponse)
+def access_profiles_page(request: Request):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem gerenciar perfis."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        return templates.TemplateResponse(
+            request,
+            "access_profiles.html",
+            {
+                "title": "Perfis de acesso",
+                "active_page": "access_profiles",
+                "user": request.session.get("user"),
+                "profiles": db.query(AccessProfile).order_by(AccessProfile.name).all(),
+            },
+        )
+    finally:
+        db.close()
+
+
+def render_profile_form(request: Request, *, profile: AccessProfile | None = None, error: str | None = None, status_code: int = 200):
+    return templates.TemplateResponse(
+        request,
+        "access_profile_form.html",
+        {
+            "title": "Editar perfil" if profile else "Novo perfil",
+            "active_page": "access_profiles",
+            "user": request.session.get("user"),
+            "profile": profile,
+            "error": error,
+        },
+        status_code=status_code,
+    )
+
+
+@app.get("/access-profiles/new", response_class=HTMLResponse)
+def access_profile_new_page(request: Request):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar perfis."):
+        return redirect
+    return render_profile_form(request)
+
+
+@app.post("/access-profiles/new", response_class=HTMLResponse)
+def access_profile_new_submit(request: Request, name: str = Form(...), description: str = Form(default=""), is_active: str | None = Form(default=None)):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar perfis."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        if db.query(AccessProfile).filter(AccessProfile.name == name.strip()).first():
+            return render_profile_form(request, error="Perfil ja existe.", status_code=400)
+        profile = AccessProfile(name=name.strip(), description=description.strip() or None, is_active=bool(is_active))
+        db.add(profile)
+        db.flush()
+        record_auth_event(db, "access_profile_created", username=current_username(request), request=request, notes=f"Perfil criado: {profile.name}.")
+        db.commit()
+        return RedirectResponse("/access-profiles", status_code=303)
+    finally:
+        db.close()
+
+
+@app.get("/access-profiles/{profile_id}/edit", response_class=HTMLResponse)
+def access_profile_edit_page(request: Request, profile_id: int):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar perfis."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        profile = db.query(AccessProfile).filter(AccessProfile.id == profile_id).first()
+        if not profile:
+            return RedirectResponse("/access-profiles", status_code=303)
+        return render_profile_form(request, profile=profile)
+    finally:
+        db.close()
+
+
+@app.post("/access-profiles/{profile_id}/edit", response_class=HTMLResponse)
+def access_profile_edit_submit(request: Request, profile_id: int, name: str = Form(...), description: str = Form(default=""), is_active: str | None = Form(default=None)):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar perfis."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        profile = db.query(AccessProfile).filter(AccessProfile.id == profile_id).first()
+        if not profile:
+            return RedirectResponse("/access-profiles", status_code=303)
+        if db.query(AccessProfile).filter(AccessProfile.name == name.strip(), AccessProfile.id != profile_id).first():
+            return render_profile_form(request, profile=profile, error="Perfil ja existe.", status_code=400)
+        profile.name = name.strip()
+        profile.description = description.strip() or None
+        profile.is_active = bool(is_active)
+        if profile.name == PROFILE_ADMIN and not profile.is_active and active_admin_count(db) > 0:
+            db.rollback()
+            return render_profile_form(request, profile=profile, error="Nao e permitido desativar o perfil Administrator.", status_code=400)
+        record_auth_event(db, "access_profile_updated", username=current_username(request), request=request, notes=f"Perfil atualizado: {profile.name}.")
+        db.commit()
+        return RedirectResponse("/access-profiles", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/access-profiles/{profile_id}/deactivate")
+def access_profile_deactivate(request: Request, profile_id: int):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem desativar perfis."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        profile = db.query(AccessProfile).filter(AccessProfile.id == profile_id).first()
+        if not profile:
+            return RedirectResponse("/access-profiles", status_code=303)
+        if profile.name == PROFILE_ADMIN:
+            return forbidden_response(request, "Nao e permitido desativar o perfil Administrator.")
+        profile.is_active = False
+        record_auth_event(db, "access_profile_deactivated", username=current_username(request), request=request, notes=f"Perfil desativado: {profile.name}.")
+        db.commit()
+        return RedirectResponse("/access-profiles", status_code=303)
+    finally:
+        db.close()
+
+
+@app.get("/auth-audit-events", response_class=HTMLResponse)
+def auth_audit_events_page(
+    request: Request,
+    username: str | None = None,
+    event_type: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
+    if redirect := require_profiles(
+        request,
+        AUDIT_PROFILES,
+        "Seu perfil nao permite acessar a auditoria.",
+    ):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        query = db.query(AuthAuditEvent)
+        selected_username = (username or "").strip()
+        selected_event_type = (event_type or "").strip()
+        if selected_username:
+            query = query.filter(AuthAuditEvent.username.ilike(f"%{selected_username}%"))
+        if selected_event_type:
+            query = query.filter(AuthAuditEvent.event_type == selected_event_type)
+        if start_date:
+            query = query.filter(AuthAuditEvent.created_at >= datetime.combine(date.fromisoformat(start_date), time.min))
+        if end_date:
+            query = query.filter(AuthAuditEvent.created_at <= datetime.combine(date.fromisoformat(end_date), time.max))
+
+        events = query.order_by(AuthAuditEvent.created_at.desc()).limit(300).all()
+        event_types = [
+            item[0]
+            for item in db.query(AuthAuditEvent.event_type)
+            .filter(AuthAuditEvent.event_type.isnot(None))
+            .distinct()
+            .order_by(AuthAuditEvent.event_type)
+            .all()
+        ]
+        return templates.TemplateResponse(
+            request,
+            "auth_audit_events.html",
+            {
+                "title": "Auditoria",
+                "active_page": "auth_audit_events",
+                "user": request.session.get("user"),
+                "events": events,
+                "event_types": event_types,
+                "filters": {
+                    "username": selected_username,
+                    "event_type": selected_event_type,
+                    "start_date": start_date or "",
+                    "end_date": end_date or "",
+                },
+            },
+        )
+    finally:
+        db.close()
 
 
 @app.get("/logout")
 def logout(request: Request):
+    session_user = request.session.get("user") or {}
+    username = session_user.get("username")
+    if username:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == username).first()
+            record_auth_event(db, "logout", user=user, username=username, request=request, success=True)
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+        finally:
+            db.close()
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
@@ -601,7 +1228,11 @@ def contract_additional_submit(
     contact_info: str = Form(default=""),
     adjustment_type: str = Form(default=""),
 ):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        CONTRACT_WRITE_PROFILES,
+        "Seu perfil nao permite editar dados contratuais.",
+    ):
         return redirect
 
     db = SessionLocal()
@@ -627,7 +1258,11 @@ async def import_contract(
     operator_name: str | None = Form(default=None),
     import_mode: str = Form(default="contract"),
 ):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        CONTRACT_WRITE_PROFILES,
+        "Seu perfil nao permite importar ou editar contratos.",
+    ):
         return redirect
 
     selected_operator_name = (operator_name or "").strip()
@@ -710,7 +1345,7 @@ async def import_contract(
                 imported_records=1,
                 failed_records=0 if extraction_status != "failed" else 1,
                 notes=warning,
-                created_by=request.session.get("user", {}).get("username"),
+                created_by=current_username(request),
             )
             db.add(batch)
             db.flush()
@@ -743,9 +1378,16 @@ async def import_contract(
                 extracted_text=raw_text,
                 extraction_status=extraction_status,
                 extraction_method=extraction_method,
-                uploaded_by=request.session.get("user", {}).get("username"),
+                uploaded_by=current_username(request),
             )
             db.add(contract_file)
+            record_auth_event(
+                db,
+                "contract_uploaded",
+                username=current_username(request),
+                request=request,
+                notes=f"Aditivo enviado: {original_filename}. Contrato base #{parent_contract.id}.",
+            )
             db.commit()
             db.refresh(additive)
 
@@ -774,7 +1416,7 @@ async def import_contract(
             imported_records=1,
             failed_records=0 if extraction_status != "failed" else 1,
             notes=warning,
-            created_by=request.session.get("user", {}).get("username"),
+            created_by=current_username(request),
         )
         db.add(batch)
         db.flush()
@@ -840,7 +1482,7 @@ async def import_contract(
             extracted_text=raw_text,
             extraction_status=extraction_status,
             extraction_method=extraction_method,
-            uploaded_by=request.session.get("user", {}).get("username"),
+            uploaded_by=current_username(request),
         )
         db.add(contract_file)
         db.flush()
@@ -848,7 +1490,21 @@ async def import_contract(
             db,
             contract,
             file_id=contract_file.id,
-            created_by=request.session.get("user", {}).get("username"),
+            created_by=current_username(request),
+        )
+        record_auth_event(
+            db,
+            "contract_uploaded",
+            username=current_username(request),
+            request=request,
+            notes=f"Contrato enviado: {original_filename}. Contrato #{contract.id}.",
+        )
+        record_auth_event(
+            db,
+            "contract_analyzed",
+            username=current_username(request),
+            request=request,
+            notes=f"Analise gerada para contrato #{contract.id}.",
         )
         db.commit()
         db.refresh(contract)
@@ -957,7 +1613,11 @@ def aditivos(request: Request):
 
 @app.get("/analises-ia", response_class=HTMLResponse)
 def analises_ia(request: Request, contract_id: int | None = None):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        AUDIT_PROFILES,
+        "Seu perfil nao permite acessar analises e auditoria.",
+    ):
         return redirect
 
     selected_contract, contracts, analysis = latest_contract_analysis_context(contract_id)
@@ -978,7 +1638,11 @@ def analises_ia(request: Request, contract_id: int | None = None):
 
 @app.post("/analises-ia/upload")
 async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        AUDIT_PROFILES,
+        "Seu perfil nao permite executar analises e auditoria.",
+    ):
         return redirect
 
     try:
@@ -1019,7 +1683,7 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             imported_records=1,
             failed_records=0 if extraction_status != "failed" else 1,
             notes=warning,
-            created_by=request.session.get("user", {}).get("username"),
+            created_by=current_username(request),
         )
         db.add(batch)
         db.flush()
@@ -1085,7 +1749,7 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             extracted_text=raw_text,
             extraction_status=extraction_status,
             extraction_method=extraction_method,
-            uploaded_by=request.session.get("user", {}).get("username"),
+            uploaded_by=current_username(request),
         )
         db.add(contract_file)
         db.flush()
@@ -1093,7 +1757,21 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             db,
             contract,
             file_id=contract_file.id,
-            created_by=request.session.get("user", {}).get("username"),
+            created_by=current_username(request),
+        )
+        record_auth_event(
+            db,
+            "contract_uploaded",
+            username=current_username(request),
+            request=request,
+            notes=f"Contrato enviado para analise IA: {original_filename}. Contrato #{contract.id}.",
+        )
+        record_auth_event(
+            db,
+            "contract_analyzed",
+            username=current_username(request),
+            request=request,
+            notes=f"Analise IA gerada para contrato #{contract.id}.",
         )
         db.commit()
 
@@ -1120,12 +1798,29 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
 
 @app.post("/analises-ia/run")
 def analises_ia_run(request: Request, contract_id: int | None = None):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        AUDIT_PROFILES,
+        "Seu perfil nao permite executar analises e auditoria.",
+    ):
         return redirect
 
     contract, _, analysis = latest_contract_analysis_context(contract_id)
     if not contract or not analysis:
         return JSONResponse({"error": "Nenhum contrato importado para analisar."}, status_code=404)
+
+    db = SessionLocal()
+    try:
+        record_auth_event(
+            db,
+            "contract_analyzed",
+            username=current_username(request),
+            request=request,
+            notes=f"Analise reprocessada para contrato #{contract.id}.",
+        )
+        db.commit()
+    finally:
+        db.close()
 
     return JSONResponse(
         {
@@ -1139,7 +1834,11 @@ def analises_ia_run(request: Request, contract_id: int | None = None):
 
 @app.get("/comparacoes", response_class=HTMLResponse)
 def comparacoes(request: Request):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        FINANCIAL_PROFILES,
+        "Seu perfil nao permite acessar comparacoes financeiras.",
+    ):
         return redirect
 
     return templates.TemplateResponse(

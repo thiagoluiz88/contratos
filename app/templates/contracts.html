@@ -1,9 +1,23 @@
 {% extends "base.html" %}
 
+{% block head %}
+{% if not has_profile(user, CONTRACT_WRITE_PROFILES) %}
+<style>
+    .js-new-contract,
+    .js-new-aditivo,
+    .row-actions button[data-action="edit"],
+    .row-actions button[data-action="more"],
+    #contractImportModal {
+        display: none !important;
+    }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <header class="topbar contracts-topbar">
     <div>
-        <h1>Contratos</h1>
+        <h1>Contratos analisados</h1>
         <p>Gerencie, visualize e analise todos os contratos com operadoras de saúde.</p>
     </div>
     <div class="topbar-actions">
@@ -16,8 +30,10 @@
             <span>🔔</span>
             <b class="floating-badge">3</b>
         </button>
-        <button class="primary-button compact js-new-contract" type="button">+ Novo contrato</button>
-        <button class="secondary-action" type="button">Importar</button>
+        {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+        <button class="primary-button compact js-new-contract" type="button">Enviar contrato</button>
+        <button class="secondary-action js-new-contract" type="button">Importar</button>
+        {% endif %}
         <button class="secondary-action" type="button">Exportar</button>
     </div>
 </header>
@@ -300,12 +316,10 @@
         <article class="panel reveal">
             <div class="panel-header"><h2>Ações rápidas</h2></div>
             <div class="quick-actions">
-                <button class="js-new-contract" type="button">Novo contrato</button>
+                <button class="js-new-contract" type="button">Enviar contrato</button>
                 <button class="js-new-aditivo" type="button">Registrar aditivo</button>
-                <button type="button">Importar contratos</button>
-                <button type="button">Renovação em massa</button>
-                <button type="button">Gerar relatório</button>
-                <button type="button">Exportar contratos</button>
+                <a class="secondary-action" href="/analises-ia">Abrir analise IA</a>
+                <a class="secondary-action" href="/comparacoes">Comparar contratos</a>
             </div>
         </article>
 
@@ -325,6 +339,7 @@
     </aside>
 </section>
 
+{% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
 <div class="contract-import-modal" id="contractImportModal" aria-hidden="true">
     <div class="contract-import-card" role="dialog" aria-modal="true" aria-labelledby="contractImportTitle">
         <button class="contract-import-close" id="closeContractImport" type="button" aria-label="Fechar">×</button>
@@ -366,6 +381,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
