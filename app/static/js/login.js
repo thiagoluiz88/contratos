@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const password = passwordInput?.value || "";
         const confirmPassword = confirmInput?.value || "";
-        const longEnough = password.length >= 6;
+        const longEnough = password.length >= 10;
         const matches = password && confirmPassword && password === confirmPassword;
 
         if (lengthCheck) {

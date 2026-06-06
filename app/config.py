@@ -18,8 +18,13 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-SESSION_SECRET = os.getenv("APP_SECRET", "contracts-intelligence-session-secret")
+SESSION_SECRET = os.getenv("APP_SECRET", "")
 SESSION_HTTPS_ONLY = env_bool("SESSION_HTTPS_ONLY", False)
+SESSION_MAX_AGE_SECONDS = int(os.getenv("SESSION_MAX_AGE_SECONDS", "28800"))
+MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(20 * 1024 * 1024)))
+
+if len(SESSION_SECRET) < 32 or SESSION_SECRET in {"contracts-intelligence-session-secret", "troque-esta-chave-por-uma-chave-forte"}:
+    raise RuntimeError("APP_SECRET deve ser uma chave aleatoria forte com pelo menos 32 caracteres.")
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")

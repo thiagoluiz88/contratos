@@ -236,7 +236,7 @@ function setupAditivoImport() {
     const submit = document.getElementById("submitAditivoImport");
     const close = document.getElementById("closeAditivoImport");
     const cancel = document.getElementById("cancelAditivoImport");
-    const allowedExtensions = [".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"];
+    const allowedExtensions = [".pdf", ".docx", ".txt"];
 
     const setMessage = (text, type = "") => {
         if (!message) return;
@@ -250,7 +250,7 @@ function setupAditivoImport() {
         if (!allowedExtensions.includes(extension)) {
             if (input) input.value = "";
             if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
-            setMessage("Formato não suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
+            setMessage("Formato não suportado. Envie PDF, DOCX ou TXT.", "error");
             return;
         }
         if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;

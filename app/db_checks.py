@@ -22,6 +22,7 @@ def check_persistence() -> None:
         if value != "updated":
             raise RuntimeError("Falha ao validar UPDATE no PostgreSQL.")
         connection.execute(text("DELETE FROM db_health_check WHERE id = 1"))
+        connection.execute(text("DROP TABLE db_health_check"))
 
 
 if __name__ == "__main__":

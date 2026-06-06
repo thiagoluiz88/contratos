@@ -34,8 +34,9 @@
     <div class="hero-actions inline-actions">
         <a class="btn btn-secondary" href="/contracts"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
         <a class="btn btn-secondary" href="/contracts/{{ contract.id }}?edit={{ 0 if edit_mode else 1 }}"><i class="fa-solid fa-pen-to-square"></i> {{ 'Cancelar edição' if edit_mode else 'Editar cadastro' }}</a>
-        <a class="btn btn-secondary" href="/contracts/{{ contract.id }}/report.pdf"><i class="fa-solid fa-file-pdf"></i> Relatório PDF</a>
-        <a class="btn btn-danger" href="/contracts/{{ contract.id }}/delete" onclick="return confirm('Excluir este contrato?')"><i class="fa-regular fa-trash-can"></i> Excluir</a>
+        <form method="post" action="/contracts/{{ contract.id }}/delete" onsubmit="return confirm('Excluir este contrato?')">
+            <button class="btn btn-danger" type="submit"><i class="fa-regular fa-trash-can"></i> Excluir</button>
+        </form>
     </div>
 </section>
 

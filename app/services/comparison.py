@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from app.models import Contract
 
 
@@ -38,6 +40,8 @@ def compare_contracts(contracts: list[Contract]) -> list[dict]:
             value = getattr(contract, field)
             if isinstance(value, bool):
                 value = "Sim" if value else "Não"
+            elif isinstance(value, (date, datetime)):
+                value = value.isoformat()
             row["values"].append(value if value not in (None, "") else "—")
         rows.append(row)
     return rows

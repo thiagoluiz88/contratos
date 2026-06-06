@@ -6,8 +6,11 @@ Create Date: 2026-06-01 14:40:00.000000
 
 """
 from typing import Sequence, Union
+import os
 
+import bcrypt
 from alembic import op
+from sqlalchemy import text
 
 
 # revision identifiers, used by Alembic.
@@ -15,9 +18,6 @@ revision: str = "f8a1c2d3e4b5"
 down_revision: Union[str, Sequence[str], None] = "d24610c09828"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-
-ADMIN_BCRYPT_HASH = "$2b$12$zzGXJDUsBHytu43mxkVSB.Af9jFDpqwROFbsFqj8gtOVEOrHjUhYe"
 
 
 def upgrade() -> None:
@@ -53,10 +53,15 @@ def upgrade() -> None:
             updated_at = NOW()
         """
     )
-    op.execute(
-        f"""
+    initial_password = os.getenv("INITIAL_ADMIN_PASSWORD")
+    if not initial_password:
+        raise RuntimeError("Defina INITIAL_ADMIN_PASSWORD antes de aplicar a migration de autenticação.")
+    password_hash = bcrypt.hashpw(initial_password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+    op.get_bind().execute(
+        text(
+            """
         INSERT INTO users (access_profile_id, username, email, password_hash, full_name, is_active, created_at, updated_at)
-        SELECT access_profiles.id, 'admin', 'admin@contracts.local', '{ADMIN_BCRYPT_HASH}', 'Administrador', true, NOW(), NOW()
+        SELECT access_profiles.id, 'admin', 'admin@contracts.local', :password_hash, 'Administrador', true, NOW(), NOW()
         FROM access_profiles
         WHERE access_profiles.name = 'Administrator'
         ON CONFLICT (username) DO UPDATE
@@ -64,6 +69,8 @@ def upgrade() -> None:
             is_active = true,
             updated_at = NOW()
         """
+        ),
+        {"password_hash": password_hash},
     )
 
 

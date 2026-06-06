@@ -4,6 +4,7 @@ venv/
 .codex-run/
 __pycache__/
 *.pyc
+*.log
 
 .env
 .env.local

@@ -1,5 +1,7 @@
 from pathlib import Path
 from datetime import date, datetime, time
+import logging
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -10,14 +12,29 @@ from sqlalchemy import or_
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import (
+    BASE_DIR,
+    SESSION_MAX_AGE_SECONDS,
     SESSION_HTTPS_ONLY,
     SESSION_SECRET,
     STATIC_DIR,
     TEMPLATES_DIR,
     UPLOAD_DIR,
 )
-from .database import SessionLocal, init_db
-from .models import AccessProfile, AuthAuditEvent, Contract, ContractAdditive, ContractFile, ImportBatch, Operator, User
+from .security import CSRFMiddleware
+from .database import SessionLocal
+from .models import (
+    AccessProfile,
+    AuthAuditEvent,
+    Contract,
+    ContractAdditive,
+    ContractComparison,
+    ContractComparisonItem,
+    ContractEvent,
+    ContractFile,
+    ImportBatch,
+    Operator,
+    User,
+)
 from .services.auth import (
     ADDITIVE_VIEW_PROFILES,
     ADMIN_PROFILES,
@@ -41,11 +58,13 @@ from .services.auth import (
 
 
 app = FastAPI(title="Contracts Intelligence")
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site="lax",
     https_only=SESSION_HTTPS_ONLY,
+    max_age=SESSION_MAX_AGE_SECONDS,
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -80,12 +99,70 @@ templates.env.globals["ADDITIVE_VIEW_PROFILES"] = ADDITIVE_VIEW_PROFILES
 templates.env.globals["ANALYSIS_VIEW_PROFILES"] = ANALYSIS_VIEW_PROFILES
 templates.env.globals["ANALYSIS_WRITE_PROFILES"] = ANALYSIS_WRITE_PROFILES
 templates.env.globals["FINANCIAL_PROFILES"] = FINANCIAL_PROFILES
-SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".txt"}
 DEFAULT_OPERATOR_NAMES = []
+
+LOG_DIR = BASE_DIR / ".codex-run"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+security_logger = logging.getLogger("contracts.security")
+if not security_logger.handlers:
+    handler = RotatingFileHandler(LOG_DIR / "app-errors.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    security_logger.addHandler(handler)
+    security_logger.setLevel(logging.INFO)
 
 
 def format_br_date(value):
     return value.strftime("%d/%m/%Y") if value else "-"
+
+
+def parse_optional_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value and value.strip() else None
+
+
+def parse_optional_int(value: str | None) -> int | None:
+    return int(value) if value and value.strip() else None
+
+
+def contract_form_data(contract: Contract) -> dict:
+    fields = (
+        "contract_name",
+        "operator_name",
+        "contract_number",
+        "contract_object",
+        "signature_date",
+        "start_date",
+        "end_date",
+        "auto_renewal",
+        "renewal_details",
+        "termination_notice_days",
+        "payment_term_days",
+        "payment_trigger",
+        "payment_interest_clause",
+        "payment_penalty_clause",
+        "billing_deadline_days",
+        "billing_deadline_description",
+        "allows_glosa_unilateral",
+        "glosa_deadline_days",
+        "glosa_appeal_deadline_days",
+        "glosa_response_deadline_days",
+        "glosa_clause_summary",
+        "reajust_clause_exists",
+        "reajust_frequency",
+        "reajust_index",
+        "reajust_clause_summary",
+        "medical_fee_table",
+        "medical_fee_table_version",
+        "daily_rate_table",
+        "materials_table",
+        "materials_table_version",
+        "medicines_table",
+        "medicines_table_version",
+    )
+    data = {field: getattr(contract, field) for field in fields}
+    for field in ("signature_date", "start_date", "end_date"):
+        data[field] = data[field].isoformat() if data[field] else ""
+    return data
 
 
 def contract_status(contract: Contract) -> tuple[str, str]:
@@ -107,6 +184,26 @@ def score_class(score: float | None) -> str:
     if value >= 60:
         return "caution"
     return "low"
+
+
+def status_meta(contract: Contract) -> dict:
+    label, tone = contract_status(contract)
+    return {"label": label, "tone": tone}
+
+
+def badge_class(risk_level: str | None) -> str:
+    normalized = (risk_level or "").lower()
+    if "baixo" in normalized:
+        return "emerald"
+    if "moderado" in normalized:
+        return "amber"
+    if "alto" in normalized or "crítico" in normalized:
+        return "rose"
+    return "slate"
+
+
+templates.env.globals["status_meta"] = status_meta
+templates.env.globals["badge_class"] = badge_class
 
 
 def operator_logo_class(operator_name: str | None) -> str:
@@ -143,7 +240,6 @@ def latest_contract_analysis_context(contract_id: int | None = None):
 @app.on_event("startup")
 def on_startup():
     try:
-        init_db()
         db = SessionLocal()
         try:
             ensure_initial_admin(db)
@@ -151,12 +247,12 @@ def on_startup():
             db.commit()
         except SQLAlchemyError as exc:
             db.rollback()
-            print(f"Aviso: não foi possível garantir usuário administrador inicial: {exc}")
+            security_logger.exception("Falha ao garantir administrador inicial")
         finally:
             db.close()
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     except OperationalError as exc:
-        print(f"Aviso: não foi possível inicializar o banco automaticamente: {exc}")
+        security_logger.exception("Falha ao inicializar conexão com o banco")
 
 
 @app.get("/health")
@@ -171,6 +267,17 @@ def is_logged_in(request: Request) -> bool:
 def require_login(request: Request):
     if not is_logged_in(request):
         return RedirectResponse("/login", status_code=303)
+    session_user = request.session.get("user") or {}
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == session_user.get("id")).first()
+        if not user or not user.is_active or (user.access_profile and not user.access_profile.is_active):
+            request.session.clear()
+            return RedirectResponse("/login", status_code=303)
+        request.session["user"] = user_session_payload(user)
+        request.session["last_seen"] = datetime.utcnow().isoformat()
+    finally:
+        db.close()
     return None
 
 
@@ -201,6 +308,24 @@ def require_profiles(request: Request, allowed_profiles: set[str], message: str 
 
 def current_username(request: Request) -> str | None:
     return request.session.get("user", {}).get("username")
+
+
+def csrf_token(request: Request) -> str:
+    return request.session.get("csrf_token", "")
+
+
+templates.env.globals["csrf_token"] = csrf_token
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request: Request, exc: Exception):
+    security_logger.exception("Erro interno em %s %s", request.method, request.url.path)
+    return templates.TemplateResponse(
+        request,
+        "error_500.html",
+        {"title": "Erro interno", "active_page": None, "user": request.session.get("user")},
+        status_code=500,
+    )
 
 
 def active_admin_count(db) -> int:
@@ -266,8 +391,11 @@ def login_submit(
             and verify_password(password, user.password_hash)
         )
         if valid_user:
+            request.session.clear()
             request.session["user"] = user_session_payload(user)
             request.session["remember"] = bool(remember)
+            request.session["last_seen"] = datetime.utcnow().isoformat()
+            request.session["csrf_token"] = csrf_token(request) or __import__("secrets").token_urlsafe(32)
             record_auth_event(db, "login", user=user, request=request, success=True)
             db.commit()
             return RedirectResponse("/dashboard", status_code=303)
@@ -400,7 +528,7 @@ def register_submit(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": f"Não foi possível criar o usuário: {exc}"},
+            {**context, "error": "Não foi possível criar o usuário."},
             status_code=500,
         )
     finally:
@@ -493,7 +621,7 @@ def change_password_submit(
         return templates.TemplateResponse(
             request,
             "change_password.html",
-            {**context, "error": f"Não foi possível alterar a senha: {exc}"},
+            {**context, "error": "Não foi possível alterar a senha."},
             status_code=500,
         )
     finally:
@@ -585,7 +713,7 @@ def user_new_submit(
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError as exc:
         db.rollback()
-        return render_user_form(request, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all(), error=f"Não foi possível criar usuário: {exc}", status_code=500)
+        return render_user_form(request, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all(), error="Não foi possível criar usuário.", status_code=500)
     finally:
         db.close()
 
@@ -645,7 +773,7 @@ def user_edit_submit(
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError as exc:
         db.rollback()
-        return render_user_form(request, error=f"Não foi possível editar usuário: {exc}", status_code=500)
+        return render_user_form(request, error="Não foi possível editar usuário.", status_code=500)
     finally:
         db.close()
 
@@ -668,6 +796,9 @@ def user_deactivate(request: Request, user_id: int):
         record_auth_event(db, "user_deactivated", user=user_record, username=user_record.username, request=request, notes=f"Desativado por {current_username(request)}.")
         db.commit()
         return RedirectResponse("/users", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -746,6 +877,9 @@ def user_reset_password_submit(
         record_auth_event(db, "password_reset", user=user_record, username=user_record.username, request=request, notes=f"Reset por {current_username(request)}.")
         db.commit()
         return RedirectResponse("/users", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -808,6 +942,9 @@ def access_profile_new_submit(request: Request, name: str = Form(...), descripti
         record_auth_event(db, "access_profile_created", username=current_username(request), request=request, notes=f"Perfil criado: {profile.name}.")
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -848,6 +985,9 @@ def access_profile_edit_submit(request: Request, profile_id: int, name: str = Fo
         record_auth_event(db, "access_profile_updated", username=current_username(request), request=request, notes=f"Perfil atualizado: {profile.name}.")
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -868,6 +1008,9 @@ def access_profile_deactivate(request: Request, profile_id: int):
         record_auth_event(db, "access_profile_deactivated", username=current_username(request), request=request, notes=f"Perfil desativado: {profile.name}.")
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -1263,6 +1406,163 @@ def contracts(request: Request):
     )
 
 
+@app.get("/contracts/{contract_id:int}", response_class=HTMLResponse)
+def contract_detail(request: Request, contract_id: int, edit: int = 0):
+    if redirect := require_login(request):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        peers = db.query(Contract).filter(Contract.id != contract_id).order_by(Contract.score_total.desc()).limit(5).all()
+        days_until_end = (contract.end_date - date.today()).days if contract.end_date else None
+        return templates.TemplateResponse(
+            request,
+            "contract_detail.html",
+            {
+                "title": contract.contract_name,
+                "active_page": "contracts",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "edit_mode": bool(edit),
+                "form_data": contract_form_data(contract),
+                "events": db.query(ContractEvent).filter(ContractEvent.contract_id == contract_id).order_by(ContractEvent.created_at.desc()).all(),
+                "peer_contracts": peers,
+                "days_until_end": days_until_end,
+                "strong_points": (contract.strong_points or "").splitlines(),
+                "weak_points": (contract.weak_points or "").splitlines(),
+                "alerts_list": (contract.alerts or "").splitlines(),
+                "summary_cards": [
+                    {"label": "Score", "value": f"{contract.score_total or 0:.1f}", "tone": "blue"},
+                    {"label": "Risco", "value": contract.risk_level or "-", "tone": "amber"},
+                    {"label": "Eventos", "value": len(contract.events), "tone": "slate"},
+                    {"label": "Aditivos", "value": len(contract.additives), "tone": "emerald"},
+                ],
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/contracts/{contract_id:int}/edit")
+async def contract_edit_submit(request: Request, contract_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite editar contratos."):
+        return redirect
+
+    from .services.scoring import score_contract
+
+    form = await request.form()
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+
+        text_fields = (
+            "contract_name", "operator_name", "contract_number", "contract_object", "renewal_details",
+            "payment_trigger", "billing_deadline_description", "glosa_clause_summary", "reajust_frequency",
+            "reajust_index", "reajust_clause_summary", "medical_fee_table", "medical_fee_table_version",
+            "daily_rate_table", "materials_table", "materials_table_version", "medicines_table",
+            "medicines_table_version",
+        )
+        integer_fields = (
+            "termination_notice_days", "payment_term_days", "billing_deadline_days", "glosa_deadline_days",
+            "glosa_appeal_deadline_days", "glosa_response_deadline_days",
+        )
+        boolean_fields = (
+            "auto_renewal", "payment_interest_clause", "payment_penalty_clause", "allows_glosa_unilateral",
+            "reajust_clause_exists",
+        )
+        for field in text_fields:
+            setattr(contract, field, str(form.get(field, "")).strip() or None)
+        for field in integer_fields:
+            setattr(contract, field, parse_optional_int(form.get(field)))
+        for field in ("signature_date", "start_date", "end_date"):
+            setattr(contract, field, parse_optional_date(form.get(field)))
+        for field in boolean_fields:
+            setattr(contract, field, field in form)
+
+        if not contract.contract_name:
+            contract.contract_name = f"Contrato #{contract.id}"
+        operator = db.query(Operator).filter(Operator.name == contract.operator_name).first() if contract.operator_name else None
+        if contract.operator_name and not operator:
+            operator = Operator(name=contract.operator_name)
+            db.add(operator)
+            db.flush()
+        contract.operator_id = operator.id if operator else None
+
+        scoring = score_contract({column.name: getattr(contract, column.name) for column in Contract.__table__.columns})
+        for field, value in scoring.items():
+            setattr(contract, field, value)
+        record_auth_event(db, "contract_updated", username=current_username(request), request=request, notes=f"Contrato #{contract.id} atualizado.")
+        db.commit()
+        return RedirectResponse(f"/contracts/{contract.id}", status_code=303)
+    except (SQLAlchemyError, ValueError) as exc:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível atualizar o contrato."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.post("/contracts/{contract_id:int}/events")
+def contract_event_submit(
+    request: Request,
+    contract_id: int,
+    event_type: str = Form(default="nota"),
+    event_date: str = Form(default=""),
+    title: str = Form(...),
+    notes: str = Form(default=""),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite registrar eventos."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        if not db.query(Contract).filter(Contract.id == contract_id).first():
+            return RedirectResponse("/contracts", status_code=303)
+        event = ContractEvent(
+            contract_id=contract_id,
+            event_type=event_type.strip() or "nota",
+            event_date=parse_optional_date(event_date),
+            title=title.strip(),
+            notes=notes.strip() or None,
+        )
+        db.add(event)
+        record_auth_event(db, "contract_event_created", username=current_username(request), request=request, notes=f"Evento criado no contrato #{contract_id}: {event.title}.")
+        db.commit()
+        db.refresh(event)
+        return RedirectResponse(f"/contracts/{contract_id}", status_code=303)
+    except (SQLAlchemyError, ValueError) as exc:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível registrar o evento."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.post("/contracts/{contract_id:int}/delete")
+def contract_delete(request: Request, contract_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite excluir contratos."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        name = contract.contract_name
+        db.delete(contract)
+        record_auth_event(db, "contract_deleted", username=current_username(request), request=request, notes=f"Contrato #{contract_id} excluído: {name}.")
+        db.commit()
+        return RedirectResponse("/contracts", status_code=303)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível excluir o contrato."}, status_code=500)
+    finally:
+        db.close()
+
+
 @app.get("/contracts/import")
 def contracts_import_page(request: Request):
     if redirect := require_profiles(
@@ -1334,8 +1634,12 @@ def contract_additional_submit(
         contract.contact_info = contact_info.strip() or None
         contract.adjustment_type = adjustment_type.strip() or None
         contract.reajust_index = contract.adjustment_type or contract.reajust_index
+        record_auth_event(db, "contract_updated", username=current_username(request), request=request, notes=f"Cadastro adicional atualizado no contrato #{contract.id}.")
         db.commit()
         return RedirectResponse(f"/contracts/{contract_id}/additional?saved=1", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -1621,7 +1925,6 @@ async def import_contract(
         return JSONResponse(
             {
                 "error": "Não foi possível gravar o contrato no banco de dados.",
-                "detail": str(exc),
             },
             status_code=500,
         )
@@ -1630,7 +1933,6 @@ async def import_contract(
         return JSONResponse(
             {
                 "error": "Não foi possível importar o contrato.",
-                "detail": str(exc),
             },
             status_code=500,
         )
@@ -1912,7 +2214,7 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
     except SQLAlchemyError as exc:
         db.rollback()
         return JSONResponse(
-            {"error": "Não foi possível gravar o contrato para análise.", "detail": str(exc)},
+            {"error": "Não foi possível gravar o contrato para análise."},
             status_code=500,
         )
     finally:
@@ -1929,12 +2231,16 @@ def analises_ia_run(request: Request, contract_id: int | None = None):
     ):
         return redirect
 
-    contract, _, analysis = latest_contract_analysis_context(contract_id)
-    if not contract or not analysis:
-        return JSONResponse({"error": "Nenhum contrato importado para analisar."}, status_code=404)
-
     db = SessionLocal()
     try:
+        query = db.query(Contract)
+        contract = query.filter(Contract.id == contract_id).first() if contract_id else query.order_by(Contract.created_at.desc()).first()
+        if not contract:
+            return JSONResponse({"error": "Nenhum contrato importado para analisar."}, status_code=404)
+        from .services.ai_analysis import build_contract_analysis, persist_contract_analysis
+
+        persisted = persist_contract_analysis(db, contract, created_by=current_username(request))
+        analysis = build_contract_analysis(contract)
         record_auth_event(
             db,
             "contract_analyzed",
@@ -1943,6 +2249,10 @@ def analises_ia_run(request: Request, contract_id: int | None = None):
             notes=f"Análise reprocessada para contrato #{contract.id}.",
         )
         db.commit()
+        db.refresh(persisted)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível persistir a análise."}, status_code=500)
     finally:
         db.close()
 
@@ -1965,12 +2275,79 @@ def comparacoes(request: Request):
     ):
         return redirect
 
-    return templates.TemplateResponse(
+    db = SessionLocal()
+    try:
+        return templates.TemplateResponse(
+            request,
+            "comparacoes.html",
+            {
+                "title": "Comparações",
+                "active_page": "comparacoes",
+                "user": request.session.get("user"),
+                "contracts": db.query(Contract).order_by(Contract.created_at.desc()).all(),
+                "comparisons": db.query(ContractComparison).order_by(ContractComparison.created_at.desc()).all(),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/comparacoes")
+async def comparison_create(request: Request):
+    if redirect := require_profiles(
         request,
-        "comparacoes.html",
-        {
-            "title": "Comparações",
-            "active_page": "comparacoes",
-            "user": request.session.get("user"),
-        },
-    )
+        FINANCIAL_PROFILES,
+        "Seu perfil não permite criar comparações financeiras.",
+    ):
+        return redirect
+
+    from .services.comparison import compare_contracts
+
+    form = await request.form()
+    try:
+        contract_ids = list(dict.fromkeys(int(value) for value in form.getlist("contract_ids")))
+    except ValueError:
+        return JSONResponse({"error": "Seleção de contratos inválida."}, status_code=400)
+    if len(contract_ids) < 2:
+        return JSONResponse({"error": "Selecione pelo menos dois contratos."}, status_code=400)
+
+    db = SessionLocal()
+    try:
+        contracts = db.query(Contract).filter(Contract.id.in_(contract_ids)).all()
+        by_id = {contract.id: contract for contract in contracts}
+        ordered_contracts = [by_id[contract_id] for contract_id in contract_ids if contract_id in by_id]
+        if len(ordered_contracts) != len(contract_ids):
+            return JSONResponse({"error": "Um dos contratos selecionados não existe."}, status_code=404)
+
+        rows = compare_contracts(ordered_contracts)
+        best = max(ordered_contracts, key=lambda item: item.score_total or 0)
+        comparison = ContractComparison(
+            title=str(form.get("title", "")).strip() or f"Comparação {datetime.now():%d/%m/%Y %H:%M}",
+            status="completed",
+            criteria_count=len(rows),
+            best_contract_id=best.id,
+            summary=f"Melhor score: {best.contract_name} ({best.score_total or 0:.1f}).",
+            result_payload={"rows": rows, "contract_ids": contract_ids},
+            created_by=current_username(request),
+        )
+        db.add(comparison)
+        db.flush()
+        for position, contract in enumerate(ordered_contracts, start=1):
+            db.add(
+                ContractComparisonItem(
+                    comparison_id=comparison.id,
+                    contract_id=contract.id,
+                    position=position,
+                    score=contract.score_total,
+                    metrics_payload={"contract_name": contract.contract_name, "operator_name": contract.operator_name},
+                )
+            )
+        record_auth_event(db, "contract_comparison_created", username=current_username(request), request=request, notes=f"Comparação #{comparison.id} criada com {len(ordered_contracts)} contratos.")
+        db.commit()
+        db.refresh(comparison)
+        return RedirectResponse(f"/comparacoes?created={comparison.id}", status_code=303)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível salvar a comparação."}, status_code=500)
+    finally:
+        db.close()

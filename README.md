@@ -57,6 +57,8 @@ DB_PORT=5432
 DB_NAME=contratos_db
 DB_USER=postgres
 DB_PASSWORD=sua_senha_local
+APP_SECRET=uma-chave-aleatoria-com-pelo-menos-32-caracteres
+INITIAL_ADMIN_PASSWORD=uma-senha-forte-para-a-criacao-inicial
 ```
 
 Crie as tabelas:
@@ -88,6 +90,17 @@ Para execucao manual, use o Uvicorn sem `--reload`:
 ```powershell
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+## Verificações de segurança
+
+Execute as auditorias locais:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.audit_security
+.\.venv\Scripts\python.exe -m scripts.audit_persistence
+```
+
+O sistema deve ser executado somente em `127.0.0.1`. Para exposição em rede, configure HTTPS, proxy reverso e controles adicionais.
 
 ## Login inicial
 

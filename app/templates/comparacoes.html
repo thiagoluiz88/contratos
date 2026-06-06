@@ -4,77 +4,62 @@
 <header class="topbar contracts-topbar comparisons-topbar">
     <div>
         <h1>Comparação de contratos</h1>
-        <p>Compare contrato novo e antigo para identificar perdas de proteção, ganhos e impactos para a unidade hospitalar.</p>
-    </div>
-    <div class="topbar-actions">
-        <label class="search-box global-search" aria-label="Busca em comparações">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
-            <input id="comparisonSearch" type="search" placeholder="Buscar cláusulas, riscos e contratos...">
-        </label>
-        <button id="newComparison" class="primary-button compact" type="button">Nova comparação</button>
+        <p>Crie comparações persistentes usando os contratos cadastrados no PostgreSQL.</p>
     </div>
 </header>
 
-<section class="panel comparison-select-panel reveal">
-    <div class="panel-header"><h2>Contratos para comparar</h2></div>
-    <div class="comparison-selected-grid" id="selectedContracts"></div>
-</section>
-
-<section class="comparison-tabs reveal" aria-label="Abas de comparação">
-    <button class="active" type="button" data-tab="resumo">Resumo Geral</button>
-    <button type="button" data-tab="clausulas">Cláusulas removidas ou alteradas</button>
-    <button type="button" data-tab="reajustes">Mudanças financeiras</button>
-    <button type="button" data-tab="prazos">Mudanças de prazo</button>
-    <button type="button" data-tab="glosas">Glosas e pagamento</button>
-    <button type="button" data-tab="rescisao">Rescisão</button>
-</section>
-
-<section class="comparison-layout">
-    <div class="comparison-main">
-        <section class="panel comparison-overview-panel reveal" id="comparisonSummary">
-            <div class="panel-header"><h2>Proteção do hospital na nova versão</h2></div>
-            <div class="table-wrap comparison-table-wrap">
-                <table class="comparison-table">
-                    <thead id="comparisonTableHead"></thead>
-                    <tbody id="comparisonTableBody"></tbody>
-                </table>
-            </div>
-            <div class="comparison-legend">
-                <span><i class="legend-green"></i> melhorou a proteção</span>
-                <span><i class="legend-orange"></i> exige atenção</span>
-                <span><i class="legend-red"></i> piorou a proteção</span>
-                <span><i class="legend-gray"></i> sem mudança relevante</span>
-            </div>
-        </section>
-
-        <section class="panel comparison-tab-placeholder" id="comparisonPlaceholder" hidden>
-            <h2 id="comparisonPlaceholderTitle">Resultado da comparação</h2>
-            <p>Use esta visão para apontar cláusulas removidas, pioradas, melhoradas e impactos financeiros, jurídicos e operacionais.</p>
-        </section>
-
-        <section class="comparison-highlights reveal" id="comparisonHighlights">
-            <article class="panel comparison-highlight-card"><span class="highlight-icon green">+</span><strong>Cláusulas melhoradas</strong><h3>Maior proteção jurídica</h3><p>Identifique pontos que protegem mais a unidade hospitalar.</p></article>
-            <article class="panel comparison-highlight-card"><span class="highlight-icon red">!</span><strong>Cláusulas pioradas</strong><h3>Risco de renegociação</h3><p>Marque mudanças que reduzem garantias, prazos ou previsibilidade financeira.</p></article>
-            <article class="panel comparison-highlight-card"><span class="highlight-icon orange">$</span><strong>Mudanças financeiras</strong><h3>Pagamento, glosa e reajuste</h3><p>Avalie impacto financeiro antes de aprovar nova versão.</p></article>
-        </section>
+<section class="panel reveal">
+    <div class="panel-header">
+        <div>
+            <h2>Nova comparação</h2>
+            <p>Selecione pelo menos dois contratos. O resultado será salvo automaticamente.</p>
+        </div>
     </div>
-
-    <aside class="comparison-aside">
-        <article class="panel reveal"><div class="panel-header"><h2>Ranking de proteção</h2></div><ol class="comparison-ranking" id="comparisonRanking"></ol></article>
-        <article class="panel reveal"><div class="panel-header"><h2>Score comparativo</h2></div><div class="chart-area comparison-score-chart"><canvas id="comparisonScoreChart"></canvas></div></article>
-        <article class="panel reveal">
-            <div class="panel-header"><h2>Principais diferenças</h2></div>
-            <ul class="comparison-differences">
-                <li><strong>Cláusulas removidas</strong><small>Verifique se a nova versão retirou garantias do hospital.</small></li>
-                <li><strong>Cláusulas pioradas</strong><small>Aponte redução de prazo, proteção financeira ou segurança jurídica.</small></li>
-                <li><strong>Cláusulas melhoradas</strong><small>Destaque ganhos de proteção e previsibilidade.</small></li>
-            </ul>
-        </article>
-    </aside>
+    <form method="post" action="/comparacoes" class="form-grid two-cols">
+        <label class="full">
+            <span>Título da comparação</span>
+            <input name="title" placeholder="Ex.: Contrato atual x proposta 2026">
+        </label>
+        <div class="full comparison-selected-grid">
+            {% for contract in contracts %}
+            <label class="comparison-contract-card">
+                <input type="checkbox" name="contract_ids" value="{{ contract.id }}">
+                <div>
+                    <strong>{{ contract.contract_name }}</strong>
+                    <small>{{ contract.operator_name or 'Operadora não informada' }} · Score {{ '%.1f'|format(contract.score_total or 0) }}</small>
+                </div>
+            </label>
+            {% else %}
+            <div class="empty-state inline">Importe contratos antes de criar uma comparação.</div>
+            {% endfor %}
+        </div>
+        <div class="full inline-actions">
+            <button class="primary-button compact" type="submit" {% if contracts|length < 2 %}disabled{% endif %}>Salvar comparação</button>
+        </div>
+    </form>
 </section>
-{% endblock %}
 
-{% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="{{ url_for('static', path='js/comparacoes.js') }}" defer></script>
+<section class="panel reveal">
+    <div class="panel-header"><h2>Comparações salvas</h2></div>
+    <div class="table-wrap">
+        <table class="modern-table">
+            <thead>
+                <tr><th>Título</th><th>Contratos</th><th>Critérios</th><th>Resumo</th><th>Criada em</th></tr>
+            </thead>
+            <tbody>
+                {% for comparison in comparisons %}
+                <tr>
+                    <td><strong>{{ comparison.title }}</strong></td>
+                    <td>{{ comparison.items|length }}</td>
+                    <td>{{ comparison.criteria_count }}</td>
+                    <td>{{ comparison.summary or '-' }}</td>
+                    <td>{{ comparison.created_at.strftime('%d/%m/%Y %H:%M') if comparison.created_at else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5"><div class="empty-state inline">Nenhuma comparação salva.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 {% endblock %}

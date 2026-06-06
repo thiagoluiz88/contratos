@@ -235,7 +235,7 @@ function setContractImportMode(mode = "contract") {
     if (description) {
         description.textContent = isAdditive
             ? "Importe o arquivo do aditivo e informe de qual convênio ele faz parte."
-            : "Adicione ou importe PDF, DOCX, DOC, TXT, MD e imagens digitalizadas com OCR.";
+            : "Adicione ou importe PDF, DOCX ou TXT.";
     }
     if (operatorLabel) operatorLabel.textContent = isAdditive ? "Convênio do aditivo" : "Convênio";
     if (operatorSelect?.options?.[0]) {
@@ -277,7 +277,7 @@ function setupContractImport() {
     const submit = document.getElementById("submitContractImport");
     const close = document.getElementById("closeContractImport");
     const cancel = document.getElementById("cancelContractImport");
-    const allowedExtensions = [".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"];
+    const allowedExtensions = [".pdf", ".docx", ".txt"];
 
     const setMessage = (text, type = "") => {
         if (!message) return;
@@ -305,13 +305,11 @@ function setupContractImport() {
         if (!allowedExtensions.includes(extension)) {
             if (input) input.value = "";
             if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
-            setMessage("Formato não suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
+            setMessage("Formato não suportado. Envie PDF, DOCX ou TXT.", "error");
             return;
         }
         if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;
-        setMessage(extension === ".doc"
-            ? "DOC legado será salvo; para extração automática completa, prefira DOCX, PDF ou imagem com OCR."
-            : "Arquivo pronto para importação. PDFs e imagens digitalizadas serão lidos com OCR quando necessário.", "success");
+        setMessage("Arquivo pronto para importação.", "success");
     };
 
     input?.addEventListener("change", () => setFile(input.files?.[0]));
