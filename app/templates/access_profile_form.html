@@ -3,9 +3,9 @@
 {% block content %}
 <section class="page-header">
     <div>
-        <span class="eyebrow">Administracao</span>
+        <span class="eyebrow">Administração</span>
         <h1>{{ title }}</h1>
-        <p>Defina nome, descricao e status do perfil.</p>
+        <p>Defina nome, descrição e status do perfil.</p>
     </div>
     <a class="secondary-action" href="/access-profiles">Voltar</a>
 </section>
@@ -15,7 +15,7 @@
         {% if error %}<div class="form-alert" role="alert">{{ error }}</div>{% endif %}
         <form method="post" action="{{ '/access-profiles/' ~ profile.id ~ '/edit' if profile else '/access-profiles/new' }}" class="auth-form">
             <label><span>Nome do perfil</span><span class="auth-input"><input name="name" type="text" value="{{ profile.name if profile else '' }}" required></span></label>
-            <label><span>Descricao</span><span class="auth-input"><input name="description" type="text" value="{{ profile.description if profile else '' }}"></span></label>
+            <label><span>Descrição</span><span class="auth-input"><input name="description" type="text" value="{{ profile.description if profile else '' }}"></span></label>
             <label class="check-row"><input name="is_active" value="1" type="checkbox" {% if not profile or profile.is_active %}checked{% endif %}><span>Perfil ativo</span></label>
             <button class="primary-button" type="submit">Salvar perfil</button>
         </form>

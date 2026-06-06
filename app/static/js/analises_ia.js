@@ -96,8 +96,8 @@ function setupAiRun() {
                         );
                     })
                     .catch(() => {
-                        button.textContent = "Análise concluída";
-                        openAiModal("Análise concluída", "Resultados mockados exibidos na tela.");
+                        button.textContent = "Reprocessar análise";
+                        openAiModal("Análise não reprocessada", "Não foi possível reprocessar a análise neste momento.");
                     })
                     .finally(() => {
                         window.setTimeout(() => {

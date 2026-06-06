@@ -476,6 +476,23 @@ svg {
     padding: 12px;
 }
 
+.logout-button {
+    margin-left: auto;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--red);
+    background: #FFF5F5;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.logout-button:hover {
+    color: var(--white);
+    border-color: var(--red);
+    background: var(--red);
+}
+
 .avatar {
     width: 42px;
     height: 42px;

@@ -19,7 +19,10 @@ from .config import (
 from .database import SessionLocal, init_db
 from .models import AccessProfile, AuthAuditEvent, Contract, ContractAdditive, ContractFile, ImportBatch, Operator, User
 from .services.auth import (
+    ADDITIVE_VIEW_PROFILES,
     ADMIN_PROFILES,
+    ANALYSIS_VIEW_PROFILES,
+    ANALYSIS_WRITE_PROFILES,
     AUDIT_PROFILES,
     CONTRACT_WRITE_PROFILES,
     DEFAULT_REGISTER_PROFILE,
@@ -35,8 +38,6 @@ from .services.auth import (
     validate_password_strength,
     verify_password,
 )
-from .services.ai_analysis import build_contract_analysis, persist_contract_analysis
-from .services.uploads import UnsupportedUploadError, append_warning, prepare_contract_upload
 
 
 app = FastAPI(title="Contracts Intelligence")
@@ -49,19 +50,38 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+
+def audit_note_display(value: str | None) -> str:
+    if not value:
+        return "-"
+    replacements = {
+        "Analise": "Análise",
+        "analise": "análise",
+        "Usuario": "Usuário",
+        "usuario": "usuário",
+        "apos": "após",
+        "credenciais invalidas": "credenciais inválidas",
+        "sem exclusao": "sem exclusão",
+        "apos validacao": "após validação",
+    }
+    text = value
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
+templates.env.filters["audit_note_display"] = audit_note_display
 templates.env.globals["has_profile"] = has_profile
 templates.env.globals["ADMIN_PROFILES"] = ADMIN_PROFILES
 templates.env.globals["AUDIT_PROFILES"] = AUDIT_PROFILES
 templates.env.globals["CONTRACT_WRITE_PROFILES"] = CONTRACT_WRITE_PROFILES
+templates.env.globals["ADDITIVE_VIEW_PROFILES"] = ADDITIVE_VIEW_PROFILES
+templates.env.globals["ANALYSIS_VIEW_PROFILES"] = ANALYSIS_VIEW_PROFILES
+templates.env.globals["ANALYSIS_WRITE_PROFILES"] = ANALYSIS_WRITE_PROFILES
 templates.env.globals["FINANCIAL_PROFILES"] = FINANCIAL_PROFILES
 SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
-DEFAULT_OPERATOR_NAMES = [
-    "Amil",
-    "Bradesco SaÃƒÂºde",
-    "Hapvida",
-    "SulAmÃƒÂ©rica",
-    "Unimed",
-]
+DEFAULT_OPERATOR_NAMES = []
 
 
 def format_br_date(value):
@@ -105,6 +125,8 @@ def operator_logo_class(operator_name: str | None) -> str:
 
 
 def latest_contract_analysis_context(contract_id: int | None = None):
+    from .services.ai_analysis import build_contract_analysis
+
     db = SessionLocal()
     try:
         contracts = db.query(Contract).order_by(Contract.created_at.desc()).all()
@@ -129,12 +151,12 @@ def on_startup():
             db.commit()
         except SQLAlchemyError as exc:
             db.rollback()
-            print(f"Aviso: nao foi possivel garantir usuario administrador inicial: {exc}")
+            print(f"Aviso: não foi possível garantir usuário administrador inicial: {exc}")
         finally:
             db.close()
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     except OperationalError as exc:
-        print(f"Aviso: nÃƒÂ£o foi possÃƒÂ­vel inicializar o banco automaticamente: {exc}")
+        print(f"Aviso: não foi possível inicializar o banco automaticamente: {exc}")
 
 
 @app.get("/health")
@@ -203,7 +225,7 @@ def render_user_form(
         request,
         "user_form.html",
         {
-            "title": "Resetar senha" if reset_password else ("Editar usuario" if user_record else "Novo usuario"),
+            "title": "Resetar senha" if reset_password else ("Editar usuário" if user_record else "Novo usuário"),
             "active_page": "users",
             "user": request.session.get("user"),
             "user_record": user_record,
@@ -257,7 +279,7 @@ def login_submit(
             username=username,
             request=request,
             success=False,
-            notes="Usuario inativo, perfil inativo ou credenciais invalidas.",
+            notes="Usuário inativo, perfil inativo ou credenciais inválidas.",
         )
         db.commit()
     except SQLAlchemyError:
@@ -270,7 +292,7 @@ def login_submit(
         request,
         "login.html",
         {
-            "error": "Usuario ou senha invalidos.",
+            "error": "Usuário ou senha inválidos.",
             "username": username,
             "remember": bool(remember),
             "register_page": False,
@@ -326,7 +348,7 @@ def register_submit(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": "Este usuario ou email ja existe."},
+            {**context, "error": "Este usuário ou email já existe."},
             status_code=400,
         )
 
@@ -334,7 +356,7 @@ def register_submit(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": "Informe um email valido."},
+            {**context, "error": "Informe um email válido."},
             status_code=400,
         )
 
@@ -351,7 +373,7 @@ def register_submit(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": "As senhas nao conferem."},
+            {**context, "error": "As senhas não conferem."},
             status_code=400,
         )
 
@@ -370,7 +392,7 @@ def register_submit(
         db.flush()
         request.session["user"] = user_session_payload(user)
         record_auth_event(db, "register", user=user, request=request, success=True)
-        record_auth_event(db, "login", user=user, request=request, success=True, notes="Login automatico apos cadastro.")
+        record_auth_event(db, "login", user=user, request=request, success=True, notes="Login automático após cadastro.")
         db.commit()
         return RedirectResponse("/dashboard", status_code=303)
     except SQLAlchemyError as exc:
@@ -378,7 +400,7 @@ def register_submit(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {**context, "error": f"Nao foi possivel criar o usuario: {exc}"},
+            {**context, "error": f"Não foi possível criar o usuário: {exc}"},
             status_code=500,
         )
     finally:
@@ -432,7 +454,7 @@ def change_password_submit(
         return templates.TemplateResponse(
             request,
             "change_password.html",
-            {**context, "error": "As senhas nao conferem."},
+            {**context, "error": "As senhas não conferem."},
             status_code=400,
         )
 
@@ -447,13 +469,13 @@ def change_password_submit(
                 username=current_username(request),
                 request=request,
                 success=False,
-                notes="Senha atual invalida.",
+                notes="Senha atual inválida.",
             )
             db.commit()
             return templates.TemplateResponse(
                 request,
                 "change_password.html",
-                {**context, "error": "Senha atual invalida."},
+                {**context, "error": "Senha atual inválida."},
                 status_code=400,
             )
 
@@ -471,7 +493,7 @@ def change_password_submit(
         return templates.TemplateResponse(
             request,
             "change_password.html",
-            {**context, "error": f"Nao foi possivel alterar a senha: {exc}"},
+            {**context, "error": f"Não foi possível alterar a senha: {exc}"},
             status_code=500,
         )
     finally:
@@ -480,7 +502,7 @@ def change_password_submit(
 
 @app.get("/users", response_class=HTMLResponse)
 def users_page(request: Request):
-    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem gerenciar usuarios."):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem gerenciar usuários."):
         return redirect
 
     db = SessionLocal()
@@ -501,7 +523,7 @@ def users_page(request: Request):
             request,
             "users.html",
             {
-                "title": "Usuarios",
+                "title": "Usuários",
                 "active_page": "users",
                 "user": request.session.get("user"),
                 "users": user_rows,
@@ -513,7 +535,7 @@ def users_page(request: Request):
 
 @app.get("/users/new", response_class=HTMLResponse)
 def user_new_page(request: Request):
-    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar usuarios."):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar usuários."):
         return redirect
 
     db = SessionLocal()
@@ -533,7 +555,7 @@ def user_new_submit(
     password: str = Form(...),
     is_active: str | None = Form(default=None),
 ):
-    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar usuarios."):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem criar usuários."):
         return redirect
 
     db = SessionLocal()
@@ -541,9 +563,9 @@ def user_new_submit(
         profiles = db.query(AccessProfile).order_by(AccessProfile.name).all()
         profile = db.query(AccessProfile).filter(AccessProfile.id == access_profile_id).first()
         if not profile:
-            return render_user_form(request, profiles=profiles, error="Perfil obrigatorio.", status_code=400)
+            return render_user_form(request, profiles=profiles, error="Perfil obrigatório.", status_code=400)
         if db.query(User).filter(or_(User.username == username, User.email == email)).first():
-            return render_user_form(request, profiles=profiles, error="Usuario ou email ja existe.", status_code=400)
+            return render_user_form(request, profiles=profiles, error="Usuário ou email já existe.", status_code=400)
         password_error = validate_password_strength(password)
         if password_error:
             return render_user_form(request, profiles=profiles, error=password_error, status_code=400)
@@ -563,14 +585,14 @@ def user_new_submit(
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError as exc:
         db.rollback()
-        return render_user_form(request, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all(), error=f"Nao foi possivel criar usuario: {exc}", status_code=500)
+        return render_user_form(request, profiles=db.query(AccessProfile).order_by(AccessProfile.name).all(), error=f"Não foi possível criar usuário: {exc}", status_code=500)
     finally:
         db.close()
 
 
 @app.get("/users/{user_id}/edit", response_class=HTMLResponse)
 def user_edit_page(request: Request, user_id: int):
-    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar usuarios."):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar usuários."):
         return redirect
 
     db = SessionLocal()
@@ -592,7 +614,7 @@ def user_edit_submit(
     access_profile_id: int = Form(...),
     is_active: str | None = Form(default=None),
 ):
-    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar usuarios."):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem editar usuários."):
         return redirect
 
     db = SessionLocal()
@@ -602,12 +624,12 @@ def user_edit_submit(
         if not user_record:
             return RedirectResponse("/users", status_code=303)
         if not db.query(AccessProfile).filter(AccessProfile.id == access_profile_id).first():
-            return render_user_form(request, user_record=user_record, profiles=profiles, error="Perfil obrigatorio.", status_code=400)
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Perfil obrigatório.", status_code=400)
         duplicate = db.query(User).filter(User.email == email, User.id != user_id).first()
         if duplicate:
-            return render_user_form(request, user_record=user_record, profiles=profiles, error="Email ja cadastrado.", status_code=400)
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Email já cadastrado.", status_code=400)
         if user_record.id == request.session.get("user", {}).get("id") and not is_active:
-            return render_user_form(request, user_record=user_record, profiles=profiles, error="Voce nao pode desativar o proprio usuario.", status_code=400)
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Você não pode desativar o próprio usuário.", status_code=400)
 
         old_profile_id = user_record.access_profile_id
         user_record.full_name = full_name.strip() or None
@@ -616,21 +638,21 @@ def user_edit_submit(
         user_record.is_active = bool(is_active)
         if old_profile_id != access_profile_id and active_admin_count(db) == 0:
             db.rollback()
-            return render_user_form(request, user_record=user_record, profiles=profiles, error="Nao e permitido remover o ultimo Administrator ativo.", status_code=400)
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Não é permitido remover o último Administrator ativo.", status_code=400)
 
         record_auth_event(db, "user_updated", user=user_record, username=user_record.username, request=request, notes=f"Atualizado por {current_username(request)}.")
         db.commit()
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError as exc:
         db.rollback()
-        return render_user_form(request, error=f"Nao foi possivel editar usuario: {exc}", status_code=500)
+        return render_user_form(request, error=f"Não foi possível editar usuário: {exc}", status_code=500)
     finally:
         db.close()
 
 
 @app.post("/users/{user_id}/deactivate")
 def user_deactivate(request: Request, user_id: int):
-    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem desativar usuarios."):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem desativar usuários."):
         return redirect
 
     db = SessionLocal()
@@ -639,13 +661,48 @@ def user_deactivate(request: Request, user_id: int):
         if not user_record:
             return RedirectResponse("/users", status_code=303)
         if user_record.id == request.session.get("user", {}).get("id"):
-            return forbidden_response(request, "Voce nao pode desativar o proprio usuario.")
+            return forbidden_response(request, "Você não pode desativar o próprio usuário.")
         if user_record.access_profile and user_record.access_profile.name == PROFILE_ADMIN and active_admin_count(db) <= 1:
-            return forbidden_response(request, "Nao e permitido desativar o ultimo Administrator ativo.")
+            return forbidden_response(request, "Não é permitido desativar o último Administrator ativo.")
         user_record.is_active = False
         record_auth_event(db, "user_deactivated", user=user_record, username=user_record.username, request=request, notes=f"Desativado por {current_username(request)}.")
         db.commit()
         return RedirectResponse("/users", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/users/{user_id}/make-admin")
+def user_make_admin(request: Request, user_id: int):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Somente administradores podem alterar perfis administrativos."):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        user_record = db.query(User).filter(User.id == user_id).first()
+        admin_profile = get_access_profile(db, PROFILE_ADMIN)
+        if not user_record:
+            return RedirectResponse("/users", status_code=303)
+        if not admin_profile:
+            return forbidden_response(request, "Perfil Administrator não encontrado ou inativo.")
+        if user_record.access_profile_id == admin_profile.id:
+            return RedirectResponse("/users", status_code=303)
+
+        user_record.access_profile_id = admin_profile.id
+        user_record.is_active = True
+        record_auth_event(
+            db,
+            "user_promoted_to_admin",
+            user=user_record,
+            username=user_record.username,
+            request=request,
+            notes=f"Promovido a Administrator por {current_username(request)}.",
+        )
+        db.commit()
+        return RedirectResponse("/users", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -684,7 +741,7 @@ def user_reset_password_submit(
         if password_error:
             return render_user_form(request, user_record=user_record, reset_password=True, error=password_error, status_code=400)
         if password != password_confirm:
-            return render_user_form(request, user_record=user_record, reset_password=True, error="As senhas nao conferem.", status_code=400)
+            return render_user_form(request, user_record=user_record, reset_password=True, error="As senhas não conferem.", status_code=400)
         user_record.password_hash = hash_password(password)
         record_auth_event(db, "password_reset", user=user_record, username=user_record.username, request=request, notes=f"Reset por {current_username(request)}.")
         db.commit()
@@ -704,7 +761,7 @@ def access_profiles_page(request: Request):
             request,
             "access_profiles.html",
             {
-                "title": "Perfis de acesso",
+                "title": "Perfis de Acesso",
                 "active_page": "access_profiles",
                 "user": request.session.get("user"),
                 "profiles": db.query(AccessProfile).order_by(AccessProfile.name).all(),
@@ -744,7 +801,7 @@ def access_profile_new_submit(request: Request, name: str = Form(...), descripti
     db = SessionLocal()
     try:
         if db.query(AccessProfile).filter(AccessProfile.name == name.strip()).first():
-            return render_profile_form(request, error="Perfil ja existe.", status_code=400)
+            return render_profile_form(request, error="Perfil já existe.", status_code=400)
         profile = AccessProfile(name=name.strip(), description=description.strip() or None, is_active=bool(is_active))
         db.add(profile)
         db.flush()
@@ -781,13 +838,13 @@ def access_profile_edit_submit(request: Request, profile_id: int, name: str = Fo
         if not profile:
             return RedirectResponse("/access-profiles", status_code=303)
         if db.query(AccessProfile).filter(AccessProfile.name == name.strip(), AccessProfile.id != profile_id).first():
-            return render_profile_form(request, profile=profile, error="Perfil ja existe.", status_code=400)
+            return render_profile_form(request, profile=profile, error="Perfil já existe.", status_code=400)
         profile.name = name.strip()
         profile.description = description.strip() or None
         profile.is_active = bool(is_active)
         if profile.name == PROFILE_ADMIN and not profile.is_active and active_admin_count(db) > 0:
             db.rollback()
-            return render_profile_form(request, profile=profile, error="Nao e permitido desativar o perfil Administrator.", status_code=400)
+            return render_profile_form(request, profile=profile, error="Não é permitido desativar o perfil Administrator.", status_code=400)
         record_auth_event(db, "access_profile_updated", username=current_username(request), request=request, notes=f"Perfil atualizado: {profile.name}.")
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
@@ -806,7 +863,7 @@ def access_profile_deactivate(request: Request, profile_id: int):
         if not profile:
             return RedirectResponse("/access-profiles", status_code=303)
         if profile.name == PROFILE_ADMIN:
-            return forbidden_response(request, "Nao e permitido desativar o perfil Administrator.")
+            return forbidden_response(request, "Não é permitido desativar o perfil Administrator.")
         profile.is_active = False
         record_auth_event(db, "access_profile_deactivated", username=current_username(request), request=request, notes=f"Perfil desativado: {profile.name}.")
         db.commit()
@@ -826,7 +883,7 @@ def auth_audit_events_page(
     if redirect := require_profiles(
         request,
         AUDIT_PROFILES,
-        "Seu perfil nao permite acessar a auditoria.",
+        "Seu perfil não permite acessar a auditoria.",
     ):
         return redirect
 
@@ -928,7 +985,7 @@ def dashboard(request: Request):
             "Ativos": 0,
             "Vencendo": 0,
             "Vencidos": 0,
-            "Sem vigencia": 0,
+            "Sem vigência": 0,
         }
         expiration_counts = {
             "Vencidos": 0,
@@ -944,7 +1001,7 @@ def dashboard(request: Request):
         attention_rows = []
 
         for contract in contracts_from_db:
-            operator_name = contract.operator_name or "Operadora nao informada"
+            operator_name = contract.operator_name or "Operadora não informada"
             operator_counts[operator_name] = operator_counts.get(operator_name, 0) + 1
 
             score = float(contract.score_total or 0)
@@ -957,7 +1014,7 @@ def dashboard(request: Request):
                 or contract.daily_rate_table
                 or contract.materials_table
                 or contract.medicines_table
-                or "Nao identificada"
+                or "Não identificada"
             )
             table_counts[table_name] = table_counts.get(table_name, 0) + 1
 
@@ -1023,7 +1080,7 @@ def dashboard(request: Request):
                     else:
                         expiration_counts["+150 dias"] += 1
             else:
-                status_counts["Sem vigencia"] += 1
+                status_counts["Sem vigência"] += 1
 
             if not (contract.reajust_index or contract.adjustment_type) and len(attention_rows) < 8:
                 attention_rows.append(
@@ -1132,7 +1189,7 @@ def contracts(request: Request):
         contract_rows = []
         for contract in contracts_from_db:
             status_label, status_class = contract_status(contract)
-            operator_name = contract.operator_name or "Operadora nÃƒÂ£o informada"
+            operator_name = contract.operator_name or "Operadora não informada"
             contract_rows.append(
                 {
                     "id": contract.id,
@@ -1146,7 +1203,7 @@ def contracts(request: Request):
                     "original_filename": contract.original_filename or "-",
                     "start_date": format_br_date(contract.start_date),
                     "end_date": format_br_date(contract.end_date),
-                    "reajust_index": contract.adjustment_type or contract.reajust_index or "NÃƒÂ£o identificado",
+                    "reajust_index": contract.adjustment_type or contract.reajust_index or "Não identificado",
                     "status_label": status_label,
                     "status_class": status_class,
                     "score": int(contract.score_total or 0),
@@ -1167,7 +1224,20 @@ def contracts(request: Request):
             .all()
             if name
         )
-        operator_names.update(DEFAULT_OPERATOR_NAMES)
+        today = date.today()
+        active_count = sum(1 for item in contract_rows if item["status_class"] == "active")
+        due_30_count = sum(1 for item in contracts_from_db if item.end_date and 0 <= (item.end_date - today).days <= 30)
+        expired_count = sum(1 for item in contract_rows if item["status_class"] == "expired")
+        score_values = [item["score"] for item in contract_rows]
+        average_score = round(sum(score_values) / len(score_values)) if score_values else 0
+        operator_counts = {}
+        for item in contract_rows:
+            operator_counts[item["operator_name"]] = operator_counts.get(item["operator_name"], 0) + 1
+        operator_ranking = [
+            {"name": name, "count": count}
+            for name, count in sorted(operator_counts.items(), key=lambda row: row[1], reverse=True)[:5]
+        ]
+        contract_statuses = sorted({item["status_label"] for item in contract_rows})
     finally:
         db.close()
 
@@ -1181,8 +1251,27 @@ def contracts(request: Request):
             "operator_names": sorted(operator_names),
             "contract_rows": contract_rows,
             "contract_count": len(contract_rows),
+            "contract_metrics": {
+                "active": active_count,
+                "due_30": due_30_count,
+                "expired": expired_count,
+                "average_score": average_score,
+            },
+            "operator_ranking": operator_ranking,
+            "contract_statuses": contract_statuses,
         },
     )
+
+
+@app.get("/contracts/import")
+def contracts_import_page(request: Request):
+    if redirect := require_profiles(
+        request,
+        CONTRACT_WRITE_PROFILES,
+        "Seu perfil não permite importar contratos.",
+    ):
+        return redirect
+    return RedirectResponse("/contracts?newContract=1", status_code=303)
 
 
 @app.get("/contracts/{contract_id}/additional", response_class=HTMLResponse)
@@ -1210,7 +1299,7 @@ def contract_additional_page(request: Request, contract_id: int, saved: int = 0)
                     "IGP-M",
                     "INPC",
                     "FIPE",
-                    "Sem ÃƒÂ­ndice definido",
+                    "Sem índice definido",
                     "Pendente",
                     "Outro",
                 ],
@@ -1231,7 +1320,7 @@ def contract_additional_submit(
     if redirect := require_profiles(
         request,
         CONTRACT_WRITE_PROFILES,
-        "Seu perfil nao permite editar dados contratuais.",
+        "Seu perfil não permite editar dados contratuais.",
     ):
         return redirect
 
@@ -1261,7 +1350,7 @@ async def import_contract(
     if redirect := require_profiles(
         request,
         CONTRACT_WRITE_PROFILES,
-        "Seu perfil nao permite importar ou editar contratos.",
+        "Seu perfil não permite importar ou editar contratos.",
     ):
         return redirect
 
@@ -1271,19 +1360,21 @@ async def import_contract(
         return JSONResponse(
             {
                 "error": (
-                    "Selecione o convenio do aditivo antes de importar."
+                    "Selecione o convênio do aditivo antes de importar."
                     if is_additive
-                    else "Selecione o convenio antes de importar o contrato."
+                    else "Selecione o convênio antes de importar o contrato."
                 )
             },
             status_code=400,
         )
 
+    from .services.uploads import UnsupportedUploadError, append_warning, prepare_contract_upload
+
     try:
         upload = await prepare_contract_upload(
             file,
             SUPPORTED_CONTRACT_EXTENSIONS,
-            "Arquivo DOC salvo. Extracao automatica de DOC legado nao esta disponivel; converta para DOCX/PDF para analise completa.",
+            "Arquivo DOC salvo. Extração automática de DOC legado não está disponível; converta para DOCX/PDF para análise completa.",
         )
     except UnsupportedUploadError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
@@ -1329,7 +1420,7 @@ async def import_contract(
                 return JSONResponse(
                     {
                         "error": (
-                            "Nao ha contrato cadastrado para este convenio. "
+                            "Não há contrato cadastrado para este convênio. "
                             "Cadastre o contrato principal antes de importar o aditivo."
                         )
                     },
@@ -1486,6 +1577,8 @@ async def import_contract(
         )
         db.add(contract_file)
         db.flush()
+        from .services.ai_analysis import persist_contract_analysis
+
         persist_contract_analysis(
             db,
             contract,
@@ -1504,7 +1597,7 @@ async def import_contract(
             "contract_analyzed",
             username=current_username(request),
             request=request,
-            notes=f"Analise gerada para contrato #{contract.id}.",
+            notes=f"Análise gerada para contrato #{contract.id}.",
         )
         db.commit()
         db.refresh(contract)
@@ -1527,7 +1620,7 @@ async def import_contract(
         db.rollback()
         return JSONResponse(
             {
-                "error": "Nao foi possivel gravar o contrato no banco de dados.",
+                "error": "Não foi possível gravar o contrato no banco de dados.",
                 "detail": str(exc),
             },
             status_code=500,
@@ -1536,7 +1629,7 @@ async def import_contract(
         db.rollback()
         return JSONResponse(
             {
-                "error": "Nao foi possivel importar o contrato.",
+                "error": "Não foi possível importar o contrato.",
                 "detail": str(exc),
             },
             status_code=500,
@@ -1547,7 +1640,11 @@ async def import_contract(
 
 @app.get("/aditivos", response_class=HTMLResponse)
 def aditivos(request: Request):
-    if redirect := require_login(request):
+    if redirect := require_profiles(
+        request,
+        ADDITIVE_VIEW_PROFILES,
+        "Seu perfil não permite acessar aditivos.",
+    ):
         return redirect
 
     db = SessionLocal()
@@ -1561,7 +1658,7 @@ def aditivos(request: Request):
         )
         for additive in additives_from_db:
             contract = additive.contract
-            operator_name = contract.operator_name or "Operadora nao informada"
+            operator_name = contract.operator_name or "Operadora não informada"
             additive_rows.append(
                 {
                     "id": additive.id,
@@ -1593,7 +1690,23 @@ def aditivos(request: Request):
             .all()
             if name
         }
-        operator_names.update(DEFAULT_OPERATOR_NAMES)
+        active_count = sum(1 for item in additive_rows if item["status_class"] == "active")
+        pending_count = sum(1 for item in additive_rows if "pend" in item["status_label"].lower())
+        document_count = sum(1 for item in additive_rows if "document" in item["status_label"].lower())
+        type_counts = {}
+        for item in additive_rows:
+            type_counts[item["additive_type"]] = type_counts.get(item["additive_type"], 0) + 1
+        total_types = sum(type_counts.values()) or 1
+        additive_type_summary = [
+            {"name": name, "count": count, "percent": round((count / total_types) * 100, 1)}
+            for name, count in sorted(type_counts.items(), key=lambda row: row[1], reverse=True)
+        ]
+        additive_filter_options = {
+            "contracts": sorted({item["contract_number"] for item in additive_rows}),
+            "operators": sorted({item["operator_name"] for item in additive_rows}),
+            "types": sorted({item["additive_type"] for item in additive_rows}),
+            "statuses": sorted({item["status_label"] for item in additive_rows}),
+        }
     finally:
         db.close()
 
@@ -1607,6 +1720,13 @@ def aditivos(request: Request):
             "additive_rows": additive_rows,
             "additive_count": len(additive_rows),
             "operator_names": sorted(operator_names),
+            "additive_metrics": {
+                "active": active_count,
+                "pending": pending_count,
+                "documents": document_count,
+            },
+            "additive_type_summary": additive_type_summary,
+            "additive_filter_options": additive_filter_options,
         },
     )
 
@@ -1615,8 +1735,8 @@ def aditivos(request: Request):
 def analises_ia(request: Request, contract_id: int | None = None):
     if redirect := require_profiles(
         request,
-        AUDIT_PROFILES,
-        "Seu perfil nao permite acessar analises e auditoria.",
+        ANALYSIS_VIEW_PROFILES,
+        "Seu perfil não permite acessar análises contratuais.",
     ):
         return redirect
 
@@ -1625,7 +1745,7 @@ def analises_ia(request: Request, contract_id: int | None = None):
         request,
         "analises_ia.html",
         {
-            "title": "AnÃƒÂ¡lises por IA",
+            "title": "Análises por IA",
             "active_page": "analises_ia",
             "user": request.session.get("user"),
             "contract": selected_contract,
@@ -1640,10 +1760,12 @@ def analises_ia(request: Request, contract_id: int | None = None):
 async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
     if redirect := require_profiles(
         request,
-        AUDIT_PROFILES,
-        "Seu perfil nao permite executar analises e auditoria.",
+        ANALYSIS_WRITE_PROFILES,
+        "Seu perfil não permite importar ou reprocessar análises.",
     ):
         return redirect
+
+    from .services.uploads import UnsupportedUploadError, prepare_contract_upload
 
     try:
         upload = await prepare_contract_upload(
@@ -1753,6 +1875,8 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
         )
         db.add(contract_file)
         db.flush()
+        from .services.ai_analysis import persist_contract_analysis
+
         persist_contract_analysis(
             db,
             contract,
@@ -1764,14 +1888,14 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             "contract_uploaded",
             username=current_username(request),
             request=request,
-            notes=f"Contrato enviado para analise IA: {original_filename}. Contrato #{contract.id}.",
+            notes=f"Contrato enviado para análise IA: {original_filename}. Contrato #{contract.id}.",
         )
         record_auth_event(
             db,
             "contract_analyzed",
             username=current_username(request),
             request=request,
-            notes=f"Analise IA gerada para contrato #{contract.id}.",
+            notes=f"Análise IA gerada para contrato #{contract.id}.",
         )
         db.commit()
 
@@ -1788,7 +1912,7 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
     except SQLAlchemyError as exc:
         db.rollback()
         return JSONResponse(
-            {"error": "NÃƒÂ£o foi possÃƒÂ­vel gravar o contrato para anÃƒÂ¡lise.", "detail": str(exc)},
+            {"error": "Não foi possível gravar o contrato para análise.", "detail": str(exc)},
             status_code=500,
         )
     finally:
@@ -1800,8 +1924,8 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
 def analises_ia_run(request: Request, contract_id: int | None = None):
     if redirect := require_profiles(
         request,
-        AUDIT_PROFILES,
-        "Seu perfil nao permite executar analises e auditoria.",
+        ANALYSIS_WRITE_PROFILES,
+        "Seu perfil não permite executar análises contratuais.",
     ):
         return redirect
 
@@ -1816,7 +1940,7 @@ def analises_ia_run(request: Request, contract_id: int | None = None):
             "contract_analyzed",
             username=current_username(request),
             request=request,
-            notes=f"Analise reprocessada para contrato #{contract.id}.",
+            notes=f"Análise reprocessada para contrato #{contract.id}.",
         )
         db.commit()
     finally:
@@ -1837,7 +1961,7 @@ def comparacoes(request: Request):
     if redirect := require_profiles(
         request,
         FINANCIAL_PROFILES,
-        "Seu perfil nao permite acessar comparacoes financeiras.",
+        "Seu perfil não permite acessar comparações financeiras.",
     ):
         return redirect
 
@@ -1845,7 +1969,7 @@ def comparacoes(request: Request):
         request,
         "comparacoes.html",
         {
-            "title": "ComparaÃƒÂ§ÃƒÂµes",
+            "title": "Comparações",
             "active_page": "comparacoes",
             "user": request.session.get("user"),
         },

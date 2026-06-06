@@ -17,7 +17,7 @@
 <header class="topbar contracts-topbar">
     <div>
         <h1>Aditivos</h1>
-        <p>Gerencie e acompanhe todos os aditivos dos contratos.</p>
+        <p>Suporte documental dos aditivos vinculados aos contratos reais.</p>
     </div>
     <div class="topbar-actions">
         <label class="search-box global-search" aria-label="Busca global de aditivos">
@@ -25,141 +25,36 @@
             <input id="globalAditivoSearch" type="search" placeholder="Buscar aditivos, contratos, operadoras...">
             <kbd>Ctrl + K</kbd>
         </label>
-        <button class="icon-button" type="button" aria-label="Notificacoes">
-            <span>!</span>
-            <b class="floating-badge">3</b>
-        </button>
         {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
-        <button class="primary-button compact js-new-aditivo" type="button">+ Novo aditivo</button>
-        <button class="secondary-action js-new-aditivo" type="button">Importar</button>
+        <button class="primary-button compact js-new-aditivo" type="button">Importar aditivo</button>
         {% endif %}
     </div>
 </header>
 
 <section class="contracts-metrics aditivos-metrics">
-    <article class="metric-card reveal">
-        <span class="metric-icon green">□</span>
-        <div><p>Total de aditivos</p><strong>{{ additive_count + 56 }}</strong><small>Todos os aditivos cadastrados</small></div>
-    </article>
-    <article class="metric-card reveal">
-        <span class="metric-icon green">✓</span>
-        <div><p>Aditivos ativos</p><strong>44</strong><small>78,6% do total</small></div>
-    </article>
-    <article class="metric-card reveal">
-        <span class="metric-icon orange">◇</span>
-        <div><p>Pendentes de assinatura</p><strong>7</strong><small>12,5% do total</small></div>
-    </article>
-    <article class="metric-card reveal">
-        <span class="metric-icon purple">◷</span>
-        <div><p>Vencendo em 30 dias</p><strong>5</strong><small>8,9% do total</small></div>
-    </article>
-    <article class="metric-card reveal">
-        <span class="metric-icon blue">!</span>
-        <div><p>Aditivos vencidos</p><strong>2</strong><small>3,6% do total</small></div>
-    </article>
+    <article class="metric-card reveal"><span class="metric-icon green">A</span><div><p>Total de aditivos</p><strong>{{ additive_count }}</strong><small>Registros no PostgreSQL</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon green">O</span><div><p>Aditivos ativos</p><strong>{{ additive_metrics.active }}</strong><small>Status ativo</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon orange">P</span><div><p>Pendentes</p><strong>{{ additive_metrics.pending }}</strong><small>Aguardando finalização</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon blue">D</span><div><p>Documentos</p><strong>{{ additive_metrics.documents }}</strong><small>Aguardando documento</small></div></article>
 </section>
 
 <section class="contracts-layout aditivos-layout">
     <div class="contracts-main">
         <section class="panel filters-panel reveal">
             <div class="filters-grid aditivos-filters-grid">
-                <label class="filter-field">
-                    <span>Buscar</span>
-                    <input id="aditivoTableSearch" type="search" placeholder="Buscar...">
-                </label>
-                <label class="filter-field">
-                    <span>Contrato</span>
-                    <select id="contractFilter">
-                        <option value="">Todos</option>
-                        <option>CT-2024-0021</option>
-                        <option>CT-2024-0018</option>
-                        <option>CT-2024-0033</option>
-                        <option>CT-2024-0042</option>
-                    </select>
-                </label>
-                <label class="filter-field">
-                    <span>Operadora</span>
-                    <select id="aditivoOperatorFilter">
-                        <option value="">Todas</option>
-                        <option>Unimed</option>
-                        <option>Amil</option>
-                        <option>Bradesco Saúde</option>
-                        <option>SulAmérica</option>
-                        <option>Hapvida</option>
-                        <option>São Cristóvão</option>
-                        <option>Care Plus</option>
-                        <option>Golden Cross</option>
-                    </select>
-                </label>
-                <label class="filter-field">
-                    <span>Tipo de aditivo</span>
-                    <select id="aditivoTypeFilter">
-                        <option value="">Todos</option>
-                        <option>Reajuste</option>
-                        <option>Ajuste Contratual</option>
-                        <option>Inclusão de Serviço</option>
-                        <option>Prorrogação</option>
-                        <option>Inclusão de Unidade</option>
-                        <option>Suspensão</option>
-                    </select>
-                </label>
-                <label class="filter-field">
-                    <span>Status</span>
-                    <select id="aditivoStatusFilter">
-                        <option value="">Todos</option>
-                        <option>Ativo</option>
-                        <option>Pendente</option>
-                        <option>Documento pendente</option>
-                        <option>Cláusula crítica</option>
-                        <option>Suspenso</option>
-                        <option>Vencido</option>
-                    </select>
-                </label>
-                <label class="filter-field">
-                    <span>Vigência</span>
-                    <select id="aditivoTermFilter">
-                        <option value="">Todos</option>
-                        <option>Vencendo 30 dias</option>
-                        <option>Vencendo 60 dias</option>
-                        <option>Vencidos</option>
-                    </select>
-                </label>
-                <button class="more-filters" type="button">Mais filtros</button>
+                <label class="filter-field"><span>Buscar</span><input id="aditivoTableSearch" type="search" placeholder="Buscar..."></label>
+                <label class="filter-field"><span>Contrato</span><select id="contractFilter"><option value="">Todos</option>{% for name in additive_filter_options.contracts %}<option>{{ name }}</option>{% endfor %}</select></label>
+                <label class="filter-field"><span>Operadora</span><select id="aditivoOperatorFilter"><option value="">Todas</option>{% for name in additive_filter_options.operators %}<option>{{ name }}</option>{% endfor %}</select></label>
+                <label class="filter-field"><span>Tipo</span><select id="aditivoTypeFilter"><option value="">Todos</option>{% for name in additive_filter_options.types %}<option>{{ name }}</option>{% endfor %}</select></label>
+                <label class="filter-field"><span>Status</span><select id="aditivoStatusFilter"><option value="">Todos</option>{% for name in additive_filter_options.statuses %}<option>{{ name }}</option>{% endfor %}</select></label>
             </div>
-            <div class="applied-filters">
-                <span>Filtros aplicados:</span>
-                <b id="aditivoStatusBadge">Status: Todos</b>
-                <b id="aditivoPeriodBadge">Período: Todos</b>
-                <button id="clearAditivoFilters" type="button">Limpar filtros</button>
-                <label class="sort-field">
-                    <span>Ordenar por:</span>
-                    <select id="aditivoSortFilter">
-                        <option>Mais recentes</option>
-                        <option>Mais antigos</option>
-                        <option>Vencimento próximo</option>
-                        <option>Tipo</option>
-                        <option>Operadora</option>
-                    </select>
-                </label>
-            </div>
+            <div class="applied-filters"><span>Filtros aplicados:</span><b id="aditivoStatusBadge">Status: Todos</b><b id="aditivoPeriodBadge">Período: Todos</b><button id="clearAditivoFilters" type="button">Limpar filtros</button></div>
         </section>
 
         <section class="panel contracts-table-panel reveal">
             <div class="table-wrap contracts-table-wrap">
                 <table class="contracts-table aditivos-table">
-                    <thead>
-                        <tr>
-                            <th>Aditivo</th>
-                            <th>Contrato</th>
-                            <th>Operadora</th>
-                            <th>Tipo</th>
-                            <th>Objeto</th>
-                            <th>Vigência</th>
-                            <th>Status</th>
-                            <th>Responsável</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Aditivo</th><th>Contrato</th><th>Operadora</th><th>Tipo</th><th>Objeto</th><th>Vigência</th><th>Status</th><th>Responsável</th><th>Ações</th></tr></thead>
                     <tbody id="aditivosRows">
                         {% for additive in additive_rows %}
                         <tr data-aditivo="{{ additive.additive_number }}" data-contract="{{ additive.contract_number }}" data-operator="{{ additive.operator_name }}" data-type="{{ additive.additive_type }}" data-status="{{ additive.status_label }}" data-responsible="{{ additive.responsible_name }}" data-object="{{ additive.object_summary }}">
@@ -171,192 +66,40 @@
                             <td><span>{{ additive.start_date }} até {{ additive.end_date }}</span><small>Assinado em: {{ additive.signature_date }}</small></td>
                             <td><span class="status-pill {{ additive.status_class }}">{{ additive.status_label }}</span></td>
                             <td><strong>{{ additive.responsible_name }}</strong><small>{{ additive.responsible_role }}</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
+                            <td class="row-actions"><button data-action="view">Abrir</button><button data-action="edit">Editar</button><button data-action="more">Mais</button></td>
                         </tr>
+                        {% else %}
+                        <tr><td colspan="9"><div class="empty-state inline">Nenhum aditivo importado.</div></td></tr>
                         {% endfor %}
-                        <tr data-aditivo="AD-2024-0007" data-contract="CT-2024-0021" data-operator="Unimed" data-type="Reajuste" data-status="Ativo" data-responsible="Carlos Menezes" data-object="Reajuste anual de 6,12%">
-                            <td><strong>AD-2024-0007</strong><small>Assinado em: 10/06/2024</small></td>
-                            <td><strong>CT-2024-0021</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo unimed">U</span><strong>Unimed</strong><small>Unimed São Paulo</small></td>
-                            <td><span class="type-pill reajuste">Reajuste</span></td>
-                            <td><span>Reajuste anual de 6,12%</span><small>Índice: IPCA</small></td>
-                            <td><span>15/06/2024 até 14/06/2025</span></td>
-                            <td><span class="status-pill active">Ativo</span></td>
-                            <td><strong>Carlos Menezes</strong><small>Gerente Comercial</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0006" data-contract="CT-2024-0018" data-operator="Amil" data-type="Ajuste Contratual" data-status="Pendente" data-responsible="Juliana Prado" data-object="Ajuste nas regras de faturamento">
-                            <td><strong>AD-2024-0006</strong><small>Assinado em: 05/06/2024</small></td>
-                            <td><strong>CT-2024-0018</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo amil">A</span><strong>Amil</strong><small>Amil Assistência</small></td>
-                            <td><span class="type-pill ajuste">Ajuste Contratual</span></td>
-                            <td><span>Ajuste nas regras de faturamento</span></td>
-                            <td><span>20/06/2024 até 19/06/2025</span></td>
-                            <td><span class="status-pill warning">Pendente</span></td>
-                            <td><strong>Juliana Prado</strong><small>Gerente de Contas</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0005" data-contract="CT-2024-0033" data-operator="Bradesco Saúde" data-type="Inclusão de Serviço" data-status="Ativo" data-responsible="Ricardo Almeida" data-object="Inclusão de novos procedimentos">
-                            <td><strong>AD-2024-0005</strong><small>Assinado em: 28/05/2024</small></td>
-                            <td><strong>CT-2024-0033</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo bradesco">B</span><strong>Bradesco Saúde</strong><small>Bradesco Saúde</small></td>
-                            <td><span class="type-pill servico">Inclusão de Serviço</span></td>
-                            <td><span>Inclusão de novos procedimentos</span></td>
-                            <td><span>28/06/2024 até 27/06/2025</span></td>
-                            <td><span class="status-pill active">Ativo</span></td>
-                            <td><strong>Ricardo Almeida</strong><small>Executivo de Negócios</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0004" data-contract="CT-2024-0042" data-operator="SulAmérica" data-type="Prorrogação" data-status="Documento pendente" data-responsible="Fernanda Lima" data-object="Prorrogação de vigência contratual">
-                            <td><strong>AD-2024-0004</strong><small>Assinado em: 20/05/2024</small></td>
-                            <td><strong>CT-2024-0042</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo sulamerica">S</span><strong>SulAmérica</strong><small>SulAmérica Saúde</small></td>
-                            <td><span class="type-pill prorrogacao">Prorrogação</span></td>
-                            <td><span>Prorrogação de vigência contratual</span></td>
-                            <td><span>05/07/2024 até 04/07/2025</span></td>
-                            <td><span class="status-pill document">Documento pendente</span></td>
-                            <td><strong>Fernanda Lima</strong><small>Analista Comercial</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0003" data-contract="CT-2024-0012" data-operator="Hapvida" data-type="Reajuste" data-status="Cláusula crítica" data-responsible="Eduardo Santos" data-object="Reajuste anual de 5,90%">
-                            <td><strong>AD-2024-0003</strong><small>Assinado em: 15/05/2024</small></td>
-                            <td><strong>CT-2024-0012</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo hapvida">H</span><strong>Hapvida</strong><small>Hapvida Saúde</small></td>
-                            <td><span class="type-pill reajuste">Reajuste</span></td>
-                            <td><span>Reajuste anual de 5,90%</span><small>Índice: IPCA</small></td>
-                            <td><span>10/07/2024 até 09/07/2025</span></td>
-                            <td><span class="status-pill critical">Cláusula crítica</span></td>
-                            <td><strong>Eduardo Santos</strong><small>Gerente de Relacionamento</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0002" data-contract="CT-2024-0027" data-operator="São Cristóvão" data-type="Reajuste" data-status="Ativo" data-responsible="Patrícia Rocha" data-object="Reajuste anual de 6,00%">
-                            <td><strong>AD-2024-0002</strong><small>Assinado em: 08/05/2024</small></td>
-                            <td><strong>CT-2024-0027</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo sao">S</span><strong>São Cristóvão</strong><small>São Cristóvão Saúde</small></td>
-                            <td><span class="type-pill reajuste">Reajuste</span></td>
-                            <td><span>Reajuste anual de 6,00%</span><small>Índice: IPCA</small></td>
-                            <td><span>18/07/2024 até 17/07/2025</span></td>
-                            <td><span class="status-pill active">Ativo</span></td>
-                            <td><strong>Patrícia Rocha</strong><small>Coordenadora Comercial</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0001" data-contract="CT-2024-0048" data-operator="Care Plus" data-type="Inclusão de Unidade" data-status="Ativo" data-responsible="Marcos Vinícius" data-object="Inclusão da unidade Hospital Norte">
-                            <td><strong>AD-2024-0001</strong><small>Assinado em: 03/05/2024</small></td>
-                            <td><strong>CT-2024-0048</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo care">C</span><strong>Care Plus</strong><small>Care Plus</small></td>
-                            <td><span class="type-pill unidade">Inclusão de Unidade</span></td>
-                            <td><span>Inclusão da unidade Hospital Norte</span></td>
-                            <td><span>25/07/2024 até 24/07/2025</span></td>
-                            <td><span class="status-pill active">Ativo</span></td>
-                            <td><strong>Marcos Vinícius</strong><small>Gerente Comercial</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
-                        <tr data-aditivo="AD-2024-0000" data-contract="CT-2024-0030" data-operator="Golden Cross" data-type="Suspensão" data-status="Suspenso" data-responsible="Renato Oliveira" data-object="Suspensão temporária dos serviços">
-                            <td><strong>AD-2024-0000</strong><small>Assinado em: 01/04/2024</small></td>
-                            <td><strong>CT-2024-0030</strong><small>Hospital Santa Clara</small></td>
-                            <td><span class="operator-logo golden">G</span><strong>Golden Cross</strong><small>Golden Cross</small></td>
-                            <td><span class="type-pill suspensao">Suspensão</span></td>
-                            <td><span>Suspensão temporária dos serviços</span></td>
-                            <td><span>30/07/2024 até 29/07/2025</span></td>
-                            <td><span class="status-pill suspended">Suspenso</span></td>
-                            <td><strong>Renato Oliveira</strong><small>Executivo de Contas</small></td>
-                            <td class="row-actions"><button data-action="view" aria-label="Visualizar aditivo">◉</button><button data-action="edit" aria-label="Editar aditivo">✎</button><button data-action="more" aria-label="Mais opções">⋯</button></td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
-            <footer class="table-footer">
-                <span id="aditivoTableCounter">Mostrando 1 a {{ additive_count + 8 }} de {{ additive_count + 8 }} aditivos</span>
-                <nav class="pagination" aria-label="Paginação">
-                    <button type="button">Anterior</button>
-                    <button class="active" type="button">1</button>
-                    <button type="button">2</button>
-                    <button type="button">3</button>
-                    <span>...</span>
-                    <button type="button">7</button>
-                    <button type="button">Próximo</button>
-                </nav>
-                <select aria-label="Itens por página">
-                    <option>8 por página</option>
-                    <option>16 por página</option>
-                    <option>32 por página</option>
-                </select>
-            </footer>
+            <footer class="table-footer"><span id="aditivoTableCounter">Mostrando {{ 1 if additive_rows else 0 }} a {{ additive_count }} de {{ additive_count }} aditivos</span></footer>
         </section>
     </div>
 
     <aside class="contracts-aside">
-        <article class="panel reveal">
-            <div class="panel-header"><h2>Resumo por status</h2></div>
-            <div class="chart-area donut contract-status-chart"><canvas id="aditivosStatusChart"></canvas></div>
-            <ul class="legend-list" id="aditivosStatusLegend"></ul>
-        </article>
-
-        <article class="panel reveal">
-            <div class="panel-header"><h2>Tipos de aditivos</h2></div>
-            <ul class="type-bars">
-                <li><span><strong>Reajuste</strong><small>22 (39,3%)</small></span><i><b style="width:39.3%"></b></i></li>
-                <li><span><strong>Ajuste Contratual</strong><small>12 (21,4%)</small></span><i><b style="width:21.4%"></b></i></li>
-                <li><span><strong>Inclusão de Serviço</strong><small>8 (14,3%)</small></span><i><b style="width:14.3%"></b></i></li>
-                <li><span><strong>Prorrogação</strong><small>6 (10,7%)</small></span><i><b style="width:10.7%"></b></i></li>
-                <li><span><strong>Inclusão de Unidade</strong><small>5 (8,9%)</small></span><i><b style="width:8.9%"></b></i></li>
-                <li><span><strong>Suspensão</strong><small>3 (5,4%)</small></span><i><b style="width:5.4%"></b></i></li>
-            </ul>
-        </article>
-
-        <article class="panel reveal">
-            <div class="panel-header"><h2>Ações rápidas</h2></div>
-            <div class="quick-actions aditivos-quick-actions">
-                <button class="js-new-aditivo" type="button">Novo aditivo</button>
-                <button type="button">Pendentes de assinatura <b class="quick-badge danger">7</b></button>
-                <button type="button">Aditivos vencendo em 30 dias <b class="quick-badge warning">5</b></button>
-                <button type="button">Relatório de aditivos</button>
-                <button class="js-new-aditivo" type="button">Importar aditivos</button>
-                <button type="button">Exportar aditivos</button>
-            </div>
-        </article>
+        <article class="panel reveal"><div class="panel-header"><h2>Resumo por status</h2></div><div class="chart-area donut contract-status-chart"><canvas id="aditivosStatusChart"></canvas></div><ul class="legend-list" id="aditivosStatusLegend"></ul></article>
+        <article class="panel reveal"><div class="panel-header"><h2>Tipos de aditivos</h2></div><ul class="type-bars">{% for item in additive_type_summary %}<li><span><strong>{{ item.name }}</strong><small>{{ item.count }}</small></span><i><b style="width:{{ item.percent }}%"></b></i></li>{% else %}<li><span><strong>Nenhum tipo</strong><small>Aguardando aditivos reais</small></span><i><b style="width:0%"></b></i></li>{% endfor %}</ul></article>
+        {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+        <article class="panel reveal"><div class="panel-header"><h2>Ações rápidas</h2></div><div class="quick-actions aditivos-quick-actions"><button class="js-new-aditivo" type="button">Importar aditivo</button></div></article>
+        {% endif %}
     </aside>
 </section>
 
 {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
 <div class="contract-import-modal" id="aditivoImportModal" aria-hidden="true">
     <div class="contract-import-card" role="dialog" aria-modal="true" aria-labelledby="aditivoImportTitle">
-        <button class="contract-import-close" id="closeAditivoImport" type="button" aria-label="Fechar">×</button>
-        <div class="contract-import-header">
-            <span class="metric-icon green">□</span>
-            <div>
-                <h2 id="aditivoImportTitle">Novo aditivo</h2>
-                <p>Importe o arquivo do aditivo e informe de qual convênio ele faz parte.</p>
-            </div>
-        </div>
-
+        <button class="contract-import-close" id="closeAditivoImport" type="button" aria-label="Fechar">x</button>
+        <div class="contract-import-header"><span class="metric-icon green">A</span><div><h2 id="aditivoImportTitle">Novo aditivo</h2><p>Importe o arquivo do aditivo e informe de qual convênio ele faz parte.</p></div></div>
         <form id="aditivoImportForm" class="contract-import-form">
             <input type="hidden" name="import_mode" value="additive">
-            <label class="contract-import-field" for="aditivoOperatorSelect">
-                <span>Convênio do aditivo</span>
-                <select id="aditivoOperatorSelect" name="operator_name" required>
-                    <option value="">Selecione o convênio do aditivo</option>
-                    {% for operator_name in operator_names %}
-                    <option value="{{ operator_name }}">{{ operator_name }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="contract-dropzone" id="aditivoDropzone" for="aditivoFileInput">
-                <input id="aditivoFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.jpg,.jpeg,.png,.tif,.tiff,image/*" hidden>
-                <span>⇧</span>
-                <strong>Arraste o arquivo do aditivo aqui ou clique para selecionar</strong>
-                <small>Formatos: PDF, DOCX, DOC, TXT, MD, JPG, PNG e TIFF. Imagens e PDFs digitalizados serão lidos com OCR.</small>
-            </label>
+            <label class="contract-import-field" for="aditivoOperatorSelect"><span>Convênio do aditivo</span><select id="aditivoOperatorSelect" name="operator_name" required><option value="">Selecione o convênio do aditivo</option>{% for operator_name in operator_names %}<option value="{{ operator_name }}">{{ operator_name }}</option>{% endfor %}</select></label>
+            <label class="contract-dropzone" id="aditivoDropzone" for="aditivoFileInput"><input id="aditivoFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.jpg,.jpeg,.png,.tif,.tiff,image/*" hidden><span>+</span><strong>Arraste o arquivo do aditivo aqui ou clique para selecionar</strong><small>Formatos: PDF, DOCX, DOC, TXT, MD, JPG, PNG e TIFF.</small></label>
             <div class="contract-import-file" id="aditivoImportFile">Nenhum arquivo selecionado</div>
-            <div class="contract-import-progress" id="aditivoImportProgress" aria-hidden="true">
-                <span><b id="aditivoImportProgressBar"></b></span>
-                <small id="aditivoImportProgressText">Importando aditivo...</small>
-            </div>
+            <div class="contract-import-progress" id="aditivoImportProgress" aria-hidden="true"><span><b id="aditivoImportProgressBar"></b></span><small id="aditivoImportProgressText">Importando aditivo...</small></div>
             <div class="contract-import-message" id="aditivoImportMessage" role="status"></div>
-            <div class="contract-import-actions">
-                <button class="secondary-action" id="cancelAditivoImport" type="button">Cancelar</button>
-                <button class="primary-button compact" id="submitAditivoImport" type="submit">Importar aditivo</button>
-            </div>
+            <div class="contract-import-actions"><button class="secondary-action" id="cancelAditivoImport" type="button">Cancelar</button><button class="primary-button compact" id="submitAditivoImport" type="submit">Importar aditivo</button></div>
         </form>
     </div>
 </div>
@@ -365,5 +108,5 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
-<script src="{{ url_for('static', path='js/aditivos.js') }}?v=20260527-additive-import-mode" defer></script>
+<script src="{{ url_for('static', path='js/aditivos.js') }}?v=real-data-only" defer></script>
 {% endblock %}

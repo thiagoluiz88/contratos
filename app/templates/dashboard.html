@@ -3,8 +3,8 @@
 {% block content %}
 <header class="topbar">
     <div>
-        <h1>Dashboard de analise contratual</h1>
-        <p>Visao estrategica dos riscos, oportunidades e pontos de protecao da unidade hospitalar.</p>
+        <h1>Dashboard de análise contratual</h1>
+        <p>Visão estratégica dos riscos, oportunidades e pontos de proteção da unidade hospitalar.</p>
     </div>
     <div class="topbar-actions">
         <label class="search-box" aria-label="Buscar">
@@ -20,11 +20,11 @@
 
 <section class="metric-grid" aria-label="Indicadores principais">
     <article class="metric-card reveal"><span class="metric-icon green">C</span><div><p>Contratos analisados</p><strong>{{ metrics.total_contracts }}</strong><small>Persistidos no PostgreSQL</small></div></article>
-    <article class="metric-card reveal"><span class="metric-icon red">!</span><div><p>Contratos com alto risco</p><strong>{{ metrics.expired + metrics.due_30 }}</strong><small>Vigencia, prazo ou alerta critico</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon red">!</span><div><p>Contratos com alto risco</p><strong>{{ metrics.expired + metrics.due_30 }}</strong><small>Vigência, prazo ou alerta crítico</small></div></article>
     <article class="metric-card reveal"><span class="metric-icon orange">$</span><div><p>Riscos financeiros</p><strong>{{ metrics.no_adjustment }}</strong><small>Reajuste, pagamento, glosa, OPME e materiais</small></div></article>
-    <article class="metric-card reveal"><span class="metric-icon purple">J</span><div><p>Riscos juridicos</p><strong>{{ metrics.expired }}</strong><small>Vigencia, rescisao e clausulas criticas</small></div></article>
-    <article class="metric-card reveal"><span class="metric-icon yellow">P</span><div><p>Pendencias criticas</p><strong>{{ attention_rows|length }}</strong><small>Itens que exigem revisao</small></div></article>
-    <article class="metric-card reveal"><span class="metric-icon green">S</span><div><p>Protecao media</p><strong>{{ metrics.average_score }}/100</strong><small>Quanto maior, mais favoravel ao hospital</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon purple">J</span><div><p>Riscos jurídicos</p><strong>{{ metrics.expired }}</strong><small>Vigência, rescisão e cláusulas críticas</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon yellow">P</span><div><p>Pendências críticas</p><strong>{{ attention_rows|length }}</strong><small>Itens que exigem revisão</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon green">S</span><div><p>Proteção média</p><strong>{{ metrics.average_score }}/100</strong><small>Quanto maior, mais favorável ao hospital</small></div></article>
 </section>
 
 <section class="dashboard-grid first-row">
@@ -42,10 +42,10 @@
     </article>
 
     <article class="panel reveal">
-        <div class="panel-header"><h2>Pendencias criticas</h2></div>
+        <div class="panel-header"><h2>Pendências críticas</h2></div>
         <ul class="alert-list">
-            <li><span class="dot red"></span><div><strong>{{ metrics.expired }} contratos vencidos</strong><small>Risco juridico e operacional.</small></div></li>
-            <li><span class="dot orange"></span><div><strong>{{ metrics.due_30 }} contratos vencem em ate 30 dias</strong><small>Risco de continuidade e renegociacao.</small></div></li>
+            <li><span class="dot red"></span><div><strong>{{ metrics.expired }} contratos vencidos</strong><small>Risco jurídico e operacional.</small></div></li>
+            <li><span class="dot orange"></span><div><strong>{{ metrics.due_30 }} contratos vencem em até 30 dias</strong><small>Risco de continuidade e renegociação.</small></div></li>
             <li><span class="dot orange"></span><div><strong>{{ metrics.no_adjustment }} contratos sem reajuste claro</strong><small>Risco financeiro para a unidade hospitalar.</small></div></li>
         </ul>
     </article>
@@ -63,7 +63,7 @@
     </article>
 
     <article class="panel reveal">
-        <div class="panel-header"><h2>Historico recente</h2></div>
+        <div class="panel-header"><h2>Histórico recente</h2></div>
         <ol class="activity-list">
             {% for activity in recent_activities %}
             <li><time>{{ activity.date.strftime("%d/%m/%Y") }}</time><strong>{{ activity.title }}</strong><span>{{ activity.text }}</span></li>
@@ -76,15 +76,15 @@
 
 <section class="dashboard-grid third-row">
     <article class="panel attention-panel reveal">
-        <div class="panel-header"><h2>Contratos que precisam de atencao</h2></div>
+        <div class="panel-header"><h2>Contratos que precisam de atenção</h2></div>
         <div class="table-wrap">
             <table class="attention-table">
-                <thead><tr><th>Contrato</th><th>Operadora</th><th>Vigencia</th><th>Risco</th><th>Recomendacao</th></tr></thead>
+                <thead><tr><th>Contrato</th><th>Operadora</th><th>Vigência</th><th>Risco</th><th>Recomendação</th></tr></thead>
                 <tbody id="contractsTable">
                     {% for row in attention_rows %}
                     <tr><td>{{ row.contract }}</td><td>{{ row.operator }}</td><td>{{ row.term }}</td><td><span class="status-badge {{ row.badge }}">{{ row.reason }}</span></td><td>{{ row.action }}</td></tr>
                     {% else %}
-                    <tr><td colspan="5">Nenhum contrato exige atencao no momento.</td></tr>
+                    <tr><td colspan="5">Nenhum contrato exige atenção no momento.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

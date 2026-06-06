@@ -3,15 +3,15 @@
 {% block content %}
 <header class="topbar contracts-topbar comparisons-topbar">
     <div>
-        <h1>Comparacao de contratos</h1>
-        <p>Compare contrato novo e antigo para identificar perdas de protecao, ganhos e impactos para a unidade hospitalar.</p>
+        <h1>Comparação de contratos</h1>
+        <p>Compare contrato novo e antigo para identificar perdas de proteção, ganhos e impactos para a unidade hospitalar.</p>
     </div>
     <div class="topbar-actions">
-        <label class="search-box global-search" aria-label="Busca em comparacoes">
+        <label class="search-box global-search" aria-label="Busca em comparações">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
-            <input id="comparisonSearch" type="search" placeholder="Buscar clausulas, riscos e contratos...">
+            <input id="comparisonSearch" type="search" placeholder="Buscar cláusulas, riscos e contratos...">
         </label>
-        <button id="newComparison" class="primary-button compact" type="button">Nova comparacao</button>
+        <button id="newComparison" class="primary-button compact" type="button">Nova comparação</button>
     </div>
 </header>
 
@@ -20,19 +20,19 @@
     <div class="comparison-selected-grid" id="selectedContracts"></div>
 </section>
 
-<section class="comparison-tabs reveal" aria-label="Abas de comparacao">
+<section class="comparison-tabs reveal" aria-label="Abas de comparação">
     <button class="active" type="button" data-tab="resumo">Resumo Geral</button>
-    <button type="button" data-tab="clausulas">Clausulas removidas ou alteradas</button>
-    <button type="button" data-tab="reajustes">Mudancas financeiras</button>
-    <button type="button" data-tab="prazos">Mudancas de prazo</button>
+    <button type="button" data-tab="clausulas">Cláusulas removidas ou alteradas</button>
+    <button type="button" data-tab="reajustes">Mudanças financeiras</button>
+    <button type="button" data-tab="prazos">Mudanças de prazo</button>
     <button type="button" data-tab="glosas">Glosas e pagamento</button>
-    <button type="button" data-tab="rescisao">Rescisao</button>
+    <button type="button" data-tab="rescisao">Rescisão</button>
 </section>
 
 <section class="comparison-layout">
     <div class="comparison-main">
         <section class="panel comparison-overview-panel reveal" id="comparisonSummary">
-            <div class="panel-header"><h2>Protecao do hospital na nova versao</h2></div>
+            <div class="panel-header"><h2>Proteção do hospital na nova versão</h2></div>
             <div class="table-wrap comparison-table-wrap">
                 <table class="comparison-table">
                     <thead id="comparisonTableHead"></thead>
@@ -40,34 +40,34 @@
                 </table>
             </div>
             <div class="comparison-legend">
-                <span><i class="legend-green"></i> melhorou a protecao</span>
-                <span><i class="legend-orange"></i> exige atencao</span>
-                <span><i class="legend-red"></i> piorou a protecao</span>
-                <span><i class="legend-gray"></i> sem mudanca relevante</span>
+                <span><i class="legend-green"></i> melhorou a proteção</span>
+                <span><i class="legend-orange"></i> exige atenção</span>
+                <span><i class="legend-red"></i> piorou a proteção</span>
+                <span><i class="legend-gray"></i> sem mudança relevante</span>
             </div>
         </section>
 
         <section class="panel comparison-tab-placeholder" id="comparisonPlaceholder" hidden>
-            <h2 id="comparisonPlaceholderTitle">Resultado da comparacao</h2>
-            <p>Use esta visao para apontar clausulas removidas, pioradas, melhoradas e impactos financeiros, juridicos e operacionais.</p>
+            <h2 id="comparisonPlaceholderTitle">Resultado da comparação</h2>
+            <p>Use esta visão para apontar cláusulas removidas, pioradas, melhoradas e impactos financeiros, jurídicos e operacionais.</p>
         </section>
 
         <section class="comparison-highlights reveal" id="comparisonHighlights">
-            <article class="panel comparison-highlight-card"><span class="highlight-icon green">+</span><strong>Clausulas melhoradas</strong><h3>Maior protecao juridica</h3><p>Identifique pontos que protegem mais a unidade hospitalar.</p></article>
-            <article class="panel comparison-highlight-card"><span class="highlight-icon red">!</span><strong>Clausulas pioradas</strong><h3>Risco de renegociacao</h3><p>Marque mudancas que reduzem garantias, prazos ou previsibilidade financeira.</p></article>
-            <article class="panel comparison-highlight-card"><span class="highlight-icon orange">$</span><strong>Mudancas financeiras</strong><h3>Pagamento, glosa e reajuste</h3><p>Avalie impacto financeiro antes de aprovar nova versao.</p></article>
+            <article class="panel comparison-highlight-card"><span class="highlight-icon green">+</span><strong>Cláusulas melhoradas</strong><h3>Maior proteção jurídica</h3><p>Identifique pontos que protegem mais a unidade hospitalar.</p></article>
+            <article class="panel comparison-highlight-card"><span class="highlight-icon red">!</span><strong>Cláusulas pioradas</strong><h3>Risco de renegociação</h3><p>Marque mudanças que reduzem garantias, prazos ou previsibilidade financeira.</p></article>
+            <article class="panel comparison-highlight-card"><span class="highlight-icon orange">$</span><strong>Mudanças financeiras</strong><h3>Pagamento, glosa e reajuste</h3><p>Avalie impacto financeiro antes de aprovar nova versão.</p></article>
         </section>
     </div>
 
     <aside class="comparison-aside">
-        <article class="panel reveal"><div class="panel-header"><h2>Ranking de protecao</h2></div><ol class="comparison-ranking" id="comparisonRanking"></ol></article>
+        <article class="panel reveal"><div class="panel-header"><h2>Ranking de proteção</h2></div><ol class="comparison-ranking" id="comparisonRanking"></ol></article>
         <article class="panel reveal"><div class="panel-header"><h2>Score comparativo</h2></div><div class="chart-area comparison-score-chart"><canvas id="comparisonScoreChart"></canvas></div></article>
         <article class="panel reveal">
-            <div class="panel-header"><h2>Principais diferencas</h2></div>
+            <div class="panel-header"><h2>Principais diferenças</h2></div>
             <ul class="comparison-differences">
-                <li><strong>Clausulas removidas</strong><small>Verifique se a nova versao retirou garantias do hospital.</small></li>
-                <li><strong>Clausulas pioradas</strong><small>Aponte reducao de prazo, protecao financeira ou seguranca juridica.</small></li>
-                <li><strong>Clausulas melhoradas</strong><small>Destaque ganhos de protecao e previsibilidade.</small></li>
+                <li><strong>Cláusulas removidas</strong><small>Verifique se a nova versão retirou garantias do hospital.</small></li>
+                <li><strong>Cláusulas pioradas</strong><small>Aponte redução de prazo, proteção financeira ou segurança jurídica.</small></li>
+                <li><strong>Cláusulas melhoradas</strong><small>Destaque ganhos de proteção e previsibilidade.</small></li>
             </ul>
         </article>
     </aside>

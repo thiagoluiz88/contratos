@@ -10,6 +10,7 @@ __pycache__/
 .env.production
 contracts.db
 uploads/
+backups/
 
 .DS_Store
 Thumbs.db

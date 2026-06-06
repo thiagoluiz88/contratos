@@ -3,11 +3,11 @@
 {% block content %}
 <section class="page-header">
     <div>
-        <span class="eyebrow">Administracao</span>
-        <h1>Usuarios</h1>
-        <p>Gerencie acessos, perfis e status dos usuarios.</p>
+        <span class="eyebrow">Administração</span>
+        <h1>Usuários</h1>
+        <p>Gerencie acessos, perfis e status dos usuários.</p>
     </div>
-    <a class="primary-button compact" href="/users/new">Novo usuario</a>
+    <a class="primary-button compact" href="/users/new">Novo usuário</a>
 </section>
 
 <section class="content-section">
@@ -15,11 +15,11 @@
         <table class="contracts-table">
             <thead>
                 <tr>
-                    <th>Usuario</th>
+                    <th>Usuário</th>
                     <th>Email</th>
                     <th>Perfil</th>
                     <th>Status</th>
-                    <th>Acoes</th>
+                    <th>Ações</th>
                 </tr>
             </thead>
             <tbody>
@@ -32,6 +32,11 @@
                     <td class="admin-actions">
                         <a class="secondary-action" href="/users/{{ item.id }}/edit">Editar</a>
                         <a class="secondary-action" href="/users/{{ item.id }}/reset-password">Resetar senha</a>
+                        {% if item.is_active and item.profile != "Administrator" %}
+                        <form method="post" action="/users/{{ item.id }}/make-admin">
+                            <button class="secondary-action" type="submit">Tornar administrador</button>
+                        </form>
+                        {% endif %}
                         {% if item.is_active %}
                         <form method="post" action="/users/{{ item.id }}/deactivate">
                             <button class="secondary-action danger-action" type="submit">Desativar</button>

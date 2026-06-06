@@ -21,22 +21,32 @@
                 </span>
                 <span>
                     <strong>Contracts Intelligence</strong>
-                    <small>Analise de Contratos Hospitalares</small>
+                    <small>Análise de Contratos Hospitalares</small>
                 </span>
             </a>
 
             <nav class="side-nav">
+                {% if has_profile(user, ADMIN_PROFILES) or has_profile(user, ["Read Only"]) %}
                 <a class="nav-item {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard"><span>D</span>Painel Executivo</a>
+                {% endif %}
                 <a class="nav-item {% if active_page == 'contracts' %}active{% endif %}" href="/contracts"><span>C</span>Contratos</a>
-                {% if has_profile(user, AUDIT_PROFILES) %}
-                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>I</span>Analises por IA</a>
-                <a class="nav-item {% if active_page == 'auth_audit_events' %}active{% endif %}" href="/auth-audit-events"><span>L</span>Auditoria</a>
+                {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+                <a class="nav-item" href="/contracts/import"><span>U</span>Importar Contrato</a>
+                {% endif %}
+                {% if has_profile(user, ANALYSIS_VIEW_PROFILES) %}
+                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>A</span>Análise de Contratos</a>
                 {% endif %}
                 {% if has_profile(user, FINANCIAL_PROFILES) %}
-                <a class="nav-item {% if active_page == 'comparacoes' %}active{% endif %}" href="/comparacoes"><span>F</span>Comparacoes</a>
+                <a class="nav-item {% if active_page == 'comparacoes' %}active{% endif %}" href="/comparacoes"><span>F</span>Comparações</a>
+                {% endif %}
+                {% if has_profile(user, ADDITIVE_VIEW_PROFILES) %}
+                <a class="nav-item {% if active_page == 'aditivos' %}active{% endif %}" href="/aditivos"><span>T</span>Aditivos</a>
+                {% endif %}
+                {% if has_profile(user, AUDIT_PROFILES) %}
+                <a class="nav-item {% if active_page == 'auth_audit_events' %}active{% endif %}" href="/auth-audit-events"><span>L</span>Auditoria</a>
                 {% endif %}
                 {% if has_profile(user, ADMIN_PROFILES) %}
-                <a class="nav-item {% if active_page == 'users' %}active{% endif %}" href="/users"><span>U</span>Usuarios</a>
+                <a class="nav-item {% if active_page == 'users' %}active{% endif %}" href="/users"><span>U</span>Usuários</a>
                 <a class="nav-item {% if active_page == 'access_profiles' %}active{% endif %}" href="/access-profiles"><span>P</span>Perfis</a>
                 {% endif %}
                 <a class="nav-item {% if active_page == 'change_password' %}active{% endif %}" href="/change-password"><span>S</span>Trocar senha</a>
@@ -45,14 +55,17 @@
             <div class="sidebar-footer">
                 <div class="help-card">
                     <strong>Central de Ajuda</strong>
-                    <p>Tire duvidas e veja orientacoes</p>
+                    <p>Tire dúvidas e veja orientações</p>
                 </div>
                 <div class="user-card">
                     <span class="avatar">{{ (user.name or user.username or "U")[:2].upper() if user else "U" }}</span>
                     <span>
-                        <strong>{{ user.name or user.username if user else "Usuario" }}</strong>
+                        <strong>{{ user.name or user.username if user else "Usuário" }}</strong>
                         <small>{{ user.role if user else "Sem perfil" }}</small>
                     </span>
+                    {% if user %}
+                    <a class="logout-button" href="/logout" aria-label="Sair do sistema">Sair</a>
+                    {% endif %}
                 </div>
             </div>
         </aside>

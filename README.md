@@ -1,6 +1,6 @@
 # Contracts Intelligence
 
-Projeto FastAPI com login local e dashboard "Painel Executivo" para gestao de contratos com operadoras de saude.
+Projeto FastAPI com login local e dashboard "Painel Executivo" para gestão de contratos com operadoras de saúde.
 
 ## Stack
 
@@ -74,18 +74,24 @@ python -m alembic upgrade head
 Execute o servidor:
 
 ```powershell
-python -m uvicorn app.main:app --reload
+.\scripts\start_system.ps1
 ```
 
 Acesse:
 
 ```text
-http://127.0.0.1:8000/login
+O script informa a URL de login, por exemplo: http://127.0.0.1:8000/login
+```
+
+Para execucao manual, use o Uvicorn sem `--reload`:
+
+```powershell
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Login inicial
 
-A migration de autenticacao cria o usuario administrador inicial `admin` com senha armazenada em hash bcrypt.
+A migration de autenticação cria o usuário administrador inicial `admin` com senha armazenada em hash bcrypt.
 Altere a senha inicial antes de usar o sistema em producao.
 
 Apos login correto, o sistema redireciona para `/dashboard`.

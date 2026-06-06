@@ -36,9 +36,21 @@ function renderStatusChart() {
     const legend = document.getElementById("contractsStatusLegend");
     if (!canvas || !window.Chart) return;
 
-    const labels = ["Ativos", "Vencendo", "Vencidos", "Suspensos", "Rescindidos"];
-    const values = [102, 15, 7, 3, 1];
-    const percents = ["79,7", "11,7", "5,5", "2,3", "0,8"];
+    const rows = Array.from(document.querySelectorAll("#contractsRows tr[data-contract-id]"));
+    const counts = rows.reduce((acc, row) => {
+        const status = row.dataset.status || "Sem status";
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
+    const labels = Object.keys(counts);
+    const values = Object.values(counts);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const percents = values.map((value) => (total ? ((value / total) * 100).toFixed(1).replace(".", ",") : "0"));
+    if (!labels.length) {
+        labels.push("Sem contratos");
+        values.push(0);
+        percents.push("0");
+    }
 
     new Chart(canvas, {
         type: "doughnut",
@@ -65,7 +77,7 @@ function renderStatusChart() {
                         },
                     },
                 },
-                contractsCenterText: { text: "128" },
+                contractsCenterText: { text: String(total) },
             },
         },
         plugins: [centerTextPlugin],
@@ -85,7 +97,7 @@ function renderStatusChart() {
 }
 
 function setupContractsFilters() {
-    const rows = Array.from(document.querySelectorAll("#contractsRows tr"));
+    const rows = Array.from(document.querySelectorAll("#contractsRows tr[data-contract-id]"));
     const globalSearch = document.getElementById("globalContractSearch");
     const tableSearch = document.getElementById("tableSearch");
     const operatorFilter = document.getElementById("operatorFilter");
@@ -176,7 +188,7 @@ function setupContractActions() {
         });
     });
 
-    document.querySelectorAll(".row-actions button").forEach((button) => {
+    document.querySelectorAll("#contractsRows tr[data-contract-id] .row-actions button").forEach((button) => {
         button.addEventListener("click", () => {
             const contract = button.closest("tr")?.dataset.contract || "contrato";
             const action = button.dataset.action;
@@ -222,12 +234,12 @@ function setContractImportMode(mode = "contract") {
     if (title) title.textContent = isAdditive ? "Novo aditivo" : "Novo contrato";
     if (description) {
         description.textContent = isAdditive
-            ? "Importe o arquivo do aditivo e informe de qual convenio ele faz parte."
+            ? "Importe o arquivo do aditivo e informe de qual convênio ele faz parte."
             : "Adicione ou importe PDF, DOCX, DOC, TXT, MD e imagens digitalizadas com OCR.";
     }
-    if (operatorLabel) operatorLabel.textContent = isAdditive ? "Convenio do aditivo" : "Convenio";
+    if (operatorLabel) operatorLabel.textContent = isAdditive ? "Convênio do aditivo" : "Convênio";
     if (operatorSelect?.options?.[0]) {
-        operatorSelect.options[0].textContent = isAdditive ? "Selecione o convenio do aditivo" : "Selecione o convenio";
+        operatorSelect.options[0].textContent = isAdditive ? "Selecione o convênio do aditivo" : "Selecione o convênio";
     }
     if (dropzoneTitle) {
         dropzoneTitle.textContent = isAdditive
@@ -293,13 +305,13 @@ function setupContractImport() {
         if (!allowedExtensions.includes(extension)) {
             if (input) input.value = "";
             if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
-            setMessage("Formato nao suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
+            setMessage("Formato não suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
             return;
         }
         if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;
         setMessage(extension === ".doc"
-            ? "DOC legado sera salvo; para extracao automatica completa, prefira DOCX, PDF ou imagem com OCR."
-            : "Arquivo pronto para importacao. PDFs e imagens digitalizadas serao lidos com OCR quando necessario.", "success");
+            ? "DOC legado será salvo; para extração automática completa, prefira DOCX, PDF ou imagem com OCR."
+            : "Arquivo pronto para importação. PDFs e imagens digitalizadas serão lidos com OCR quando necessário.", "success");
     };
 
     input?.addEventListener("change", () => setFile(input.files?.[0]));
@@ -349,8 +361,8 @@ function setupContractImport() {
         if (!operatorName) {
             setMessage(
                 isAdditive
-                    ? "Selecione o convenio do aditivo antes de importar."
-                    : "Selecione o convenio antes de importar.",
+                    ? "Selecione o convênio do aditivo antes de importar."
+                    : "Selecione o convênio antes de importar.",
                 "error",
             );
             operatorSelect?.focus();
@@ -391,10 +403,10 @@ function setupContractImport() {
                 };
             }
             if (!response.ok) {
-                throw new Error(data.error || `Nao foi possivel importar o ${isAdditive ? "aditivo" : "contrato"}.`);
+                throw new Error(data.error || `Não foi possível importar o ${isAdditive ? "aditivo" : "contrato"}.`);
             }
             if (progressBar) progressBar.style.width = "100%";
-            if (progressText) progressText.textContent = "Importacao concluida.";
+            if (progressText) progressText.textContent = "Importação concluída.";
             setMessage(
                 data.warning
                     ? `${isAdditive ? "Aditivo" : "Contrato"} importado com aviso: ${data.warning}`

@@ -189,7 +189,7 @@ function renderCharts() {
     makeDoughnut(
         "tableTypeChart",
         "tableTypeLegend",
-        chartDataset("tables", ["Nao identificada"], [0]),
+        chartDataset("tables", ["Não identificada"], [0]),
         [chartColors.green, chartColors.blue, chartColors.purple, chartColors.orange, "#94A3B8"],
     );
 }

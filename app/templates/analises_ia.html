@@ -12,7 +12,9 @@
             <input id="aiGlobalSearch" type="search" placeholder="Buscar riscos, tabelas, reajuste...">
             <kbd>Ctrl + K</kbd>
         </label>
-        <a class="primary-button compact" href="/contracts">+ Importar contrato</a>
+        {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+        <a class="primary-button compact" href="/contracts/import">Importar contrato</a>
+        {% endif %}
     </div>
 </header>
 
@@ -42,6 +44,7 @@
     <button id="changeContract" class="secondary-action" type="button">Alterar contrato</button>
 </section>
 
+{% if has_profile(user, ANALYSIS_WRITE_PROFILES) %}
 <section class="panel ai-upload-panel reveal">
     <div class="ai-upload-area" id="aiDropzone" role="button" tabindex="0" aria-label="Selecionar arquivo do contrato">
         <input id="aiFileInput" type="file" accept=".pdf,.docx,.doc,.txt,.md" hidden>
@@ -62,6 +65,7 @@
         </div>
     </aside>
 </section>
+{% endif %}
 
 <section class="ai-tabs reveal" aria-label="Resultados da análise">
     <button class="active" type="button" data-tab="executivo">Resumo Executivo</button>

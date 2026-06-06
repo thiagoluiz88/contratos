@@ -3,17 +3,17 @@
 {% block content %}
 <section class="page-header">
     <div>
-        <span class="eyebrow">Seguranca</span>
+        <span class="eyebrow">Segurança</span>
         <h1>Auditoria</h1>
-        <p>Eventos de autenticacao, usuarios, perfis e senhas.</p>
+        <p>Eventos de autenticação, usuários, perfis e senhas.</p>
     </div>
 </section>
 
 <section class="content-section">
     <form class="filters-grid audit-filters" method="get" action="/auth-audit-events">
         <label class="filter-field">
-            <span>Usuario</span>
-            <input name="username" value="{{ filters.username }}" placeholder="usuario ou parte do nome">
+            <span>Usuário</span>
+            <input name="username" value="{{ filters.username }}" placeholder="usuário ou parte do nome">
         </label>
         <label class="filter-field">
             <span>Evento</span>
@@ -41,7 +41,7 @@
             <thead>
                 <tr>
                     <th>Data</th>
-                    <th>Usuario</th>
+                    <th>Usuário</th>
                     <th>Evento</th>
                     <th>Origem</th>
                     <th>Detalhes</th>
@@ -54,7 +54,7 @@
                     <td>{{ event.username or "-" }}</td>
                     <td><span class="status-pill {{ 'active' if event.success else 'expired' }}">{{ event.event_type }}</span></td>
                     <td><strong>{{ event.ip_address or "-" }}</strong><small>{{ event.user_agent or "-" }}</small></td>
-                    <td>{{ event.notes or "-" }}</td>
+                    <td>{{ event.notes|audit_note_display }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="5">Nenhum evento encontrado.</td></tr>

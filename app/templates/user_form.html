@@ -3,9 +3,9 @@
 {% block content %}
 <section class="page-header">
     <div>
-        <span class="eyebrow">Administracao</span>
+        <span class="eyebrow">Administração</span>
         <h1>{{ title }}</h1>
-        <p>{% if reset_password %}Defina uma nova senha segura para o usuario.{% else %}Configure dados, perfil e status do usuario.{% endif %}</p>
+        <p>{% if reset_password %}Defina uma nova senha segura para o usuário.{% else %}Configure dados, perfil e status do usuário.{% endif %}</p>
     </div>
     <a class="secondary-action" href="/users">Voltar</a>
 </section>
@@ -16,14 +16,14 @@
 
         {% if reset_password %}
         <form method="post" action="/users/{{ user_record.id }}/reset-password" class="auth-form">
-            <label><span>Usuario</span><span class="auth-input"><input type="text" value="{{ user_record.username }}" disabled></span></label>
+            <label><span>Usuário</span><span class="auth-input"><input type="text" value="{{ user_record.username }}" disabled></span></label>
             <label><span>Nova senha</span><span class="auth-input"><input name="password" type="password" autocomplete="new-password" required></span></label>
             <label><span>Confirmar nova senha</span><span class="auth-input"><input name="password_confirm" type="password" autocomplete="new-password" required></span></label>
             <button class="primary-button" type="submit">Resetar senha</button>
         </form>
         {% else %}
         <form method="post" action="{{ '/users/' ~ user_record.id ~ '/edit' if user_record else '/users/new' }}" class="auth-form">
-            <label><span>Usuario</span><span class="auth-input"><input name="username" type="text" value="{{ user_record.username if user_record else '' }}" {% if user_record %}disabled{% endif %} required></span></label>
+            <label><span>Usuário</span><span class="auth-input"><input name="username" type="text" value="{{ user_record.username if user_record else '' }}" {% if user_record %}disabled{% endif %} required></span></label>
             <label><span>Nome completo</span><span class="auth-input"><input name="full_name" type="text" value="{{ user_record.full_name if user_record else '' }}"></span></label>
             <label><span>Email</span><span class="auth-input"><input name="email" type="email" value="{{ user_record.email if user_record else '' }}" required></span></label>
             <label>
@@ -40,8 +40,8 @@
             {% if not user_record %}
             <label><span>Senha inicial</span><span class="auth-input"><input name="password" type="password" autocomplete="new-password" required></span></label>
             {% endif %}
-            <label class="check-row"><input name="is_active" value="1" type="checkbox" {% if not user_record or user_record.is_active %}checked{% endif %}><span>Usuario ativo</span></label>
-            <button class="primary-button" type="submit">Salvar usuario</button>
+            <label class="check-row"><input name="is_active" value="1" type="checkbox" {% if not user_record or user_record.is_active %}checked{% endif %}><span>Usuário ativo</span></label>
+            <button class="primary-button" type="submit">Salvar usuário</button>
         </form>
         {% endif %}
     </div>

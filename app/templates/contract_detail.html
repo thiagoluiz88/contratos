@@ -5,17 +5,17 @@
         <div class="hero-tags">
             {% set meta = status_meta(contract) %}
             <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
-            <span class="pill outline {{ badge_class(contract.risk_level) }}">{{ contract.classification or 'Sem classificacao' }}</span>
-            <span class="pill outline slate">{{ contract.extraction_method or 'Extracao nao informada' }}{% if contract.extraction_confidence %} &middot; {{ '%.0f'|format(contract.extraction_confidence * 100) }}%{% endif %}</span>
+            <span class="pill outline {{ badge_class(contract.risk_level) }}">{{ contract.classification or 'Sem classificação' }}</span>
+            <span class="pill outline slate">{{ contract.extraction_method or 'Extração não informada' }}{% if contract.extraction_confidence %} &middot; {{ '%.0f'|format(contract.extraction_confidence * 100) }}%{% endif %}</span>
         </div>
         <span class="eyebrow">Contrato monitorado</span>
-        <h2>{{ contract.contract_name or 'Contrato sem identificacao' }}</h2>
-        <p class="muted">Operadora {{ contract.operator_name or 'nao informada' }} &middot; Numero {{ contract.contract_number or 'nao identificado' }} &middot; Arquivo {{ contract.original_filename or '-' }}</p>
+        <h2>{{ contract.contract_name or 'Contrato sem identificação' }}</h2>
+        <p class="muted">Operadora {{ contract.operator_name or 'não informada' }} &middot; Número {{ contract.contract_number or 'não identificado' }} &middot; Arquivo {{ contract.original_filename or '-' }}</p>
 
         <div class="contract-overview-grid">
             <div class="overview-chip">
-                <span>Vigencia</span>
-                <strong>{{ contract.start_date or '-' }} ate {{ contract.end_date or '-' }}</strong>
+                <span>Vigência</span>
+                <strong>{{ contract.start_date or '-' }} até {{ contract.end_date or '-' }}</strong>
             </div>
             <div class="overview-chip">
                 <span>Pagamento</span>
@@ -33,8 +33,8 @@
     </div>
     <div class="hero-actions inline-actions">
         <a class="btn btn-secondary" href="/contracts"><i class="fa-solid fa-arrow-left"></i> Voltar</a>
-        <a class="btn btn-secondary" href="/contracts/{{ contract.id }}?edit={{ 0 if edit_mode else 1 }}"><i class="fa-solid fa-pen-to-square"></i> {{ 'Cancelar edicao' if edit_mode else 'Editar cadastro' }}</a>
-        <a class="btn btn-secondary" href="/contracts/{{ contract.id }}/report.pdf"><i class="fa-solid fa-file-pdf"></i> Relatorio PDF</a>
+        <a class="btn btn-secondary" href="/contracts/{{ contract.id }}?edit={{ 0 if edit_mode else 1 }}"><i class="fa-solid fa-pen-to-square"></i> {{ 'Cancelar edição' if edit_mode else 'Editar cadastro' }}</a>
+        <a class="btn btn-secondary" href="/contracts/{{ contract.id }}/report.pdf"><i class="fa-solid fa-file-pdf"></i> Relatório PDF</a>
         <a class="btn btn-danger" href="/contracts/{{ contract.id }}/delete" onclick="return confirm('Excluir este contrato?')"><i class="fa-regular fa-trash-can"></i> Excluir</a>
     </div>
 </section>
@@ -53,8 +53,8 @@
         <section class="panel glass-card">
             <div class="panel-head">
                 <div>
-                    <h2>{{ 'Edicao manual do cadastro' if edit_mode else 'Analise executiva do contrato' }}</h2>
-                    <p>{% if edit_mode %}Revise os campos extraidos, atualize o cadastro e recalcule o score automaticamente.{% else %}Resumo das clausulas, prazos e indicadores essenciais para decisao e acompanhamento.{% endif %}</p>
+                    <h2>{{ 'Edição manual do cadastro' if edit_mode else 'Análise executiva do contrato' }}</h2>
+                    <p>{% if edit_mode %}Revise os campos extraídos, atualize o cadastro e recalcule o score automaticamente.{% else %}Resumo das cláusulas, prazos e indicadores essenciais para decisão e acompanhamento.{% endif %}</p>
                 </div>
             </div>
 
@@ -62,47 +62,47 @@
             <form method="post" action="/contracts/{{ contract.id }}/edit" class="form-grid two-cols">
                 <label><span>Nome do contrato</span><input name="contract_name" value="{{ form_data.contract_name }}" required></label>
                 <label><span>Operadora</span><input name="operator_name" value="{{ form_data.operator_name }}"></label>
-                <label><span>Numero do contrato</span><input name="contract_number" value="{{ form_data.contract_number }}"></label>
+                <label><span>Número do contrato</span><input name="contract_number" value="{{ form_data.contract_number }}"></label>
                 <label><span>Data de assinatura</span><input type="date" name="signature_date" value="{{ form_data.signature_date }}"></label>
-                <label><span>Inicio da vigencia</span><input type="date" name="start_date" value="{{ form_data.start_date }}"></label>
-                <label><span>Fim da vigencia</span><input type="date" name="end_date" value="{{ form_data.end_date }}"></label>
-                <label class="checkbox"><input type="checkbox" name="auto_renewal" {% if form_data.auto_renewal %}checked{% endif %}><span>Renovacao automatica</span></label>
-                <label><span>Prazo de denuncia (dias)</span><input type="number" name="termination_notice_days" value="{{ form_data.termination_notice_days }}"></label>
+                <label><span>Início da vigência</span><input type="date" name="start_date" value="{{ form_data.start_date }}"></label>
+                <label><span>Fim da vigência</span><input type="date" name="end_date" value="{{ form_data.end_date }}"></label>
+                <label class="checkbox"><input type="checkbox" name="auto_renewal" {% if form_data.auto_renewal %}checked{% endif %}><span>Renovação automática</span></label>
+                <label><span>Prazo de denúncia (dias)</span><input type="number" name="termination_notice_days" value="{{ form_data.termination_notice_days }}"></label>
                 <label><span>Prazo de pagamento (dias)</span><input type="number" name="payment_term_days" value="{{ form_data.payment_term_days }}"></label>
                 <label><span>Marco do pagamento</span><input name="payment_trigger" value="{{ form_data.payment_trigger }}"></label>
-                <label class="checkbox"><input type="checkbox" name="payment_interest_clause" {% if form_data.payment_interest_clause %}checked{% endif %}><span>Preve juros por atraso</span></label>
-                <label class="checkbox"><input type="checkbox" name="payment_penalty_clause" {% if form_data.payment_penalty_clause %}checked{% endif %}><span>Preve multa por atraso</span></label>
+                <label class="checkbox"><input type="checkbox" name="payment_interest_clause" {% if form_data.payment_interest_clause %}checked{% endif %}><span>Prevê juros por atraso</span></label>
+                <label class="checkbox"><input type="checkbox" name="payment_penalty_clause" {% if form_data.payment_penalty_clause %}checked{% endif %}><span>Prevê multa por atraso</span></label>
                 <label><span>Prazo de faturamento (dias)</span><input type="number" name="billing_deadline_days" value="{{ form_data.billing_deadline_days }}"></label>
                 <label><span>Prazo de glosa (dias)</span><input type="number" name="glosa_deadline_days" value="{{ form_data.glosa_deadline_days }}"></label>
                 <label><span>Prazo recursal da glosa (dias)</span><input type="number" name="glosa_appeal_deadline_days" value="{{ form_data.glosa_appeal_deadline_days }}"></label>
                 <label><span>Prazo de resposta da glosa (dias)</span><input type="number" name="glosa_response_deadline_days" value="{{ form_data.glosa_response_deadline_days }}"></label>
                 <label class="checkbox"><input type="checkbox" name="allows_glosa_unilateral" {% if form_data.allows_glosa_unilateral %}checked{% endif %}><span>Glosa unilateral ou ampla</span></label>
-                <label class="checkbox"><input type="checkbox" name="reajust_clause_exists" {% if form_data.reajust_clause_exists %}checked{% endif %}><span>Ha clausula de reajuste</span></label>
+                <label class="checkbox"><input type="checkbox" name="reajust_clause_exists" {% if form_data.reajust_clause_exists %}checked{% endif %}><span>Há cláusula de reajuste</span></label>
                 <label><span>Periodicidade do reajuste</span><input name="reajust_frequency" value="{{ form_data.reajust_frequency }}"></label>
-                <label><span>Indice do reajuste</span><input name="reajust_index" value="{{ form_data.reajust_index }}"></label>
-                <label><span>Tabela medica</span><input name="medical_fee_table" value="{{ form_data.medical_fee_table }}"></label>
-                <label><span>Versao da tabela medica</span><input name="medical_fee_table_version" value="{{ form_data.medical_fee_table_version }}"></label>
-                <label><span>Diarias e taxas</span><input name="daily_rate_table" value="{{ form_data.daily_rate_table }}"></label>
+                <label><span>Índice do reajuste</span><input name="reajust_index" value="{{ form_data.reajust_index }}"></label>
+                <label><span>Tabela médica</span><input name="medical_fee_table" value="{{ form_data.medical_fee_table }}"></label>
+                <label><span>Versão da tabela médica</span><input name="medical_fee_table_version" value="{{ form_data.medical_fee_table_version }}"></label>
+                <label><span>Diárias e taxas</span><input name="daily_rate_table" value="{{ form_data.daily_rate_table }}"></label>
                 <label><span>Tabela de materiais</span><input name="materials_table" value="{{ form_data.materials_table }}"></label>
-                <label><span>Versao materiais</span><input name="materials_table_version" value="{{ form_data.materials_table_version }}"></label>
+                <label><span>Versão materiais</span><input name="materials_table_version" value="{{ form_data.materials_table_version }}"></label>
                 <label><span>Tabela de medicamentos</span><input name="medicines_table" value="{{ form_data.medicines_table }}"></label>
-                <label><span>Versao medicamentos</span><input name="medicines_table_version" value="{{ form_data.medicines_table_version }}"></label>
+                <label><span>Versão medicamentos</span><input name="medicines_table_version" value="{{ form_data.medicines_table_version }}"></label>
                 <label class="full"><span>Objeto do contrato</span><textarea name="contract_object">{{ form_data.contract_object }}</textarea></label>
-                <label class="full"><span>Detalhes da renovacao</span><textarea name="renewal_details">{{ form_data.renewal_details }}</textarea></label>
-                <label class="full"><span>Descricao do faturamento</span><textarea name="billing_deadline_description">{{ form_data.billing_deadline_description }}</textarea></label>
-                <label class="full"><span>Resumo da clausula de glosa</span><textarea name="glosa_clause_summary">{{ form_data.glosa_clause_summary }}</textarea></label>
-                <label class="full"><span>Resumo da clausula de reajuste</span><textarea name="reajust_clause_summary">{{ form_data.reajust_clause_summary }}</textarea></label>
-                <div class="full inline-actions"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Salvar revisao</button></div>
+                <label class="full"><span>Detalhes da renovação</span><textarea name="renewal_details">{{ form_data.renewal_details }}</textarea></label>
+                <label class="full"><span>Descrição do faturamento</span><textarea name="billing_deadline_description">{{ form_data.billing_deadline_description }}</textarea></label>
+                <label class="full"><span>Resumo da cláusula de glosa</span><textarea name="glosa_clause_summary">{{ form_data.glosa_clause_summary }}</textarea></label>
+                <label class="full"><span>Resumo da cláusula de reajuste</span><textarea name="reajust_clause_summary">{{ form_data.reajust_clause_summary }}</textarea></label>
+                <div class="full inline-actions"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Salvar revisão</button></div>
             </form>
             {% else %}
             <div class="contract-mini-grid analysis-grid">
-                <div><span>Objeto</span><strong>{{ contract.contract_object or 'Nao identificado' }}</strong></div>
-                <div><span>Renovacao</span><strong>{{ contract.renewal_details or ('Automatica' if contract.auto_renewal else 'Sem renovacao automatica identificada') }}</strong></div>
+                <div><span>Objeto</span><strong>{{ contract.contract_object or 'Não identificado' }}</strong></div>
+                <div><span>Renovação</span><strong>{{ contract.renewal_details or ('Automática' if contract.auto_renewal else 'Sem renovação automática identificada') }}</strong></div>
                 <div><span>Pagamento</span><strong>{{ contract.payment_term_days or '-' }} dias{% if contract.payment_trigger %} &middot; {{ contract.payment_trigger }}{% endif %}</strong></div>
                 <div><span>Faturamento</span><strong>{{ contract.billing_deadline_days or '-' }} dias</strong></div>
-                <div><span>Glosa</span><strong>{{ contract.glosa_clause_summary or 'Nao identificado' }}</strong></div>
-                <div><span>Reajuste</span><strong>{{ contract.reajust_clause_summary or 'Nao identificado' }}</strong></div>
-                <div><span>Tabela medica</span><strong>{{ contract.medical_fee_table or '-' }} {{ contract.medical_fee_table_version or '' }}</strong></div>
+                <div><span>Glosa</span><strong>{{ contract.glosa_clause_summary or 'Não identificado' }}</strong></div>
+                <div><span>Reajuste</span><strong>{{ contract.reajust_clause_summary or 'Não identificado' }}</strong></div>
+                <div><span>Tabela médica</span><strong>{{ contract.medical_fee_table or '-' }} {{ contract.medical_fee_table_version or '' }}</strong></div>
                 <div><span>Materiais / medicamentos</span><strong>{{ contract.materials_table or '-' }} / {{ contract.medicines_table or '-' }}</strong></div>
             </div>
             {% endif %}
@@ -111,15 +111,15 @@
         <section class="panel glass-card">
             <div class="panel-head compact">
                 <div>
-                    <h2>Historico, aditivos e notas</h2>
-                    <p>Registre renegociacoes, aditivos, observacoes juridicas e marcos importantes.</p>
+                    <h2>Histórico, aditivos e notas</h2>
+                    <p>Registre renegociações, aditivos, observações jurídicas e marcos importantes.</p>
                 </div>
             </div>
             <form method="post" action="/contracts/{{ contract.id }}/events" class="form-grid two-cols margin-bottom">
-                <label><span>Tipo</span><select name="event_type"><option value="aditivo">Aditivo</option><option value="renegociacao">Renegociacao</option><option value="nota">Nota</option><option value="juridico">Juridico</option></select></label>
+                <label><span>Tipo</span><select name="event_type"><option value="aditivo">Aditivo</option><option value="renegociacao">Renegociação</option><option value="nota">Nota</option><option value="juridico">Jurídico</option></select></label>
                 <label><span>Data</span><input type="date" name="event_date"></label>
-                <label class="full"><span>Titulo</span><input name="title" required></label>
-                <label class="full"><span>Descricao</span><textarea name="notes"></textarea></label>
+                <label class="full"><span>Título</span><input name="title" required></label>
+                <label class="full"><span>Descrição</span><textarea name="notes"></textarea></label>
                 <div class="full inline-actions"><button class="btn btn-secondary" type="submit"><i class="fa-solid fa-plus"></i> Registrar evento</button></div>
             </form>
             <div class="timeline-list">
@@ -129,7 +129,7 @@
                     <div>
                         <strong>{{ event.title }}</strong>
                         <p class="muted">{{ event.event_type|capitalize }} &middot; {{ event.event_date or event.created_at.date() }}</p>
-                        <p>{{ event.notes or 'Sem observacoes adicionais.' }}</p>
+                        <p>{{ event.notes or 'Sem observações adicionais.' }}</p>
                     </div>
                 </article>
                 {% else %}
@@ -141,7 +141,7 @@
 
     <aside class="detail-side side-stack">
         <section class="panel glass-card">
-            <div class="panel-head compact"><div><h2>Indice de avaliacao</h2><p>Score consolidado do contrato.</p></div></div>
+            <div class="panel-head compact"><div><h2>Índice de avaliação</h2><p>Score consolidado do contrato.</p></div></div>
             <div class="score-ring-wrap">
                 <div class="score-ring" style="--score: {{ contract.score_total or 0 }};">
                     <div>
@@ -152,7 +152,7 @@
             </div>
             <div class="mini-kpis">
                 <div class="mini-kpi"><span>Risco</span><strong>{{ contract.risk_level or '-' }}</strong></div>
-                <div class="mini-kpi"><span>Dias ate vencer</span><strong>{{ days_until_end if days_until_end is not none else '-' }}</strong></div>
+                <div class="mini-kpi"><span>Dias até vencer</span><strong>{{ days_until_end if days_until_end is not none else '-' }}</strong></div>
             </div>
         </section>
 
@@ -164,9 +164,9 @@
         </section>
 
         <section class="panel glass-card">
-            <div class="panel-head compact"><div><h2>Pontos de atencao</h2></div></div>
+            <div class="panel-head compact"><div><h2>Pontos de atenção</h2></div></div>
             <div class="mini-list">
-                {% for item in weak_points %}<div class="mini-list-item"><span class="status-dot rose"></span><div><strong>{{ item }}</strong></div></div>{% else %}<div class="empty-state inline">Sem pontos de atencao mapeados.</div>{% endfor %}
+                {% for item in weak_points %}<div class="mini-list-item"><span class="status-dot rose"></span><div><strong>{{ item }}</strong></div></div>{% else %}<div class="empty-state inline">Sem pontos de atenção mapeados.</div>{% endfor %}
             </div>
         </section>
 
@@ -178,18 +178,18 @@
         </section>
 
         <section class="panel glass-card">
-            <div class="panel-head compact"><div><h2>Benchmark rapido</h2><p>Outros contratos da base para consulta.</p></div></div>
+            <div class="panel-head compact"><div><h2>Benchmark rápido</h2><p>Outros contratos da base para consulta.</p></div></div>
             <div class="mini-list">
                 {% for peer in peer_contracts %}
                 <div class="mini-list-item">
                     <span class="status-dot slate"></span>
                     <div>
                         <strong>{{ peer.contract_name or 'Contrato sem nome' }}</strong>
-                        <p>{{ peer.operator_name or 'Operadora nao informada' }} &middot; Score {{ '%.1f'|format(peer.score_total or 0) }}</p>
+                        <p>{{ peer.operator_name or 'Operadora não informada' }} &middot; Score {{ '%.1f'|format(peer.score_total or 0) }}</p>
                     </div>
                 </div>
                 {% else %}
-                <div class="empty-state inline">Sem contratos comparativos disponiveis.</div>
+                <div class="empty-state inline">Sem contratos comparativos disponíveis.</div>
                 {% endfor %}
             </div>
         </section>

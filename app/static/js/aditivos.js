@@ -36,9 +36,21 @@ function renderAditivosStatusChart() {
     const legend = document.getElementById("aditivosStatusLegend");
     if (!canvas || !window.Chart) return;
 
-    const labels = ["Ativos", "Pendentes", "Vencendo", "Vencidos"];
-    const values = [44, 7, 5, 2];
-    const percents = ["78,6", "12,5", "8,9", "3,6"];
+    const rows = Array.from(document.querySelectorAll("#aditivosRows tr[data-aditivo]"));
+    const counts = rows.reduce((acc, row) => {
+        const status = row.dataset.status || "Sem status";
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
+    const labels = Object.keys(counts);
+    const values = Object.values(counts);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const percents = values.map((value) => (total ? ((value / total) * 100).toFixed(1).replace(".", ",") : "0"));
+    if (!labels.length) {
+        labels.push("Sem aditivos");
+        values.push(0);
+        percents.push("0");
+    }
 
     new Chart(canvas, {
         type: "doughnut",
@@ -65,7 +77,7 @@ function renderAditivosStatusChart() {
                         },
                     },
                 },
-                aditivosCenterText: { text: "56" },
+                aditivosCenterText: { text: String(total) },
             },
         },
         plugins: [aditivoCenterTextPlugin],
@@ -85,7 +97,7 @@ function renderAditivosStatusChart() {
 }
 
 function setupAditivosFilters() {
-    const rows = Array.from(document.querySelectorAll("#aditivosRows tr"));
+    const rows = Array.from(document.querySelectorAll("#aditivosRows tr[data-aditivo]"));
     const globalSearch = document.getElementById("globalAditivoSearch");
     const tableSearch = document.getElementById("aditivoTableSearch");
     const contractFilter = document.getElementById("contractFilter");
@@ -238,17 +250,17 @@ function setupAditivoImport() {
         if (!allowedExtensions.includes(extension)) {
             if (input) input.value = "";
             if (fileLabel) fileLabel.textContent = "Nenhum arquivo selecionado";
-            setMessage("Formato nao suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
+            setMessage("Formato não suportado. Envie PDF, DOCX, DOC, TXT, MD, JPG, PNG ou TIFF.", "error");
             return;
         }
         if (fileLabel) fileLabel.textContent = `Arquivo selecionado: ${file.name}`;
-        setMessage("Arquivo pronto para importacao. PDFs e imagens digitalizadas serao lidos com OCR quando necessario.", "success");
+        setMessage("Arquivo pronto para importação. PDFs e imagens digitalizadas serão lidos com OCR quando necessário.", "success");
     };
 
     input?.addEventListener("change", () => setFile(input.files?.[0]));
     operatorSelect?.addEventListener("change", () => {
         if (operatorSelect.value && input?.files?.[0]) {
-            setMessage("Arquivo pronto para importacao. PDFs e imagens digitalizadas serao lidos com OCR quando necessario.", "success");
+            setMessage("Arquivo pronto para importação. PDFs e imagens digitalizadas serão lidos com OCR quando necessário.", "success");
         }
     });
 
