@@ -28,7 +28,7 @@ Referência: boas práticas OWASP para autenticação, sessão, autorização, u
 - SQL dinâmico usa SQLAlchemy/parâmetros; os SQLs brutos encontrados são estáticos ou parametrizados.
 - Jinja mantém autoescape; nenhum uso de `|safe`, `Markup` ou `mark_safe` foi encontrado.
 - `.env`, uploads, backups, logs e banco local estão ignorados pelo Git.
-- Lançadores normais usam `127.0.0.1`, sem `0.0.0.0` e sem `--reload`.
+- Lançadores normais usam `127.0.0.1` por padrão, permitem rede interna apenas por `.env` e não usam `--reload`.
 - `pip-audit -r requirements.txt`: nenhuma vulnerabilidade conhecida encontrada.
 
 ## Testes obrigatórios executados
@@ -54,8 +54,8 @@ Casos validados:
 - Nome com path traversal é reduzido a basename e salvo dentro de `uploads/contracts`.
 - Cookie possui `HttpOnly`, `SameSite=Lax` e expiração.
 - `.env` permanece ignorado.
-- Execução local permanece configurada para `127.0.0.1`.
-- Uvicorn foi iniciado temporariamente em `127.0.0.1:8099`, respondeu ao `/health` e foi encerrado após o teste.
+- Execução local permanece configurada para `127.0.0.1` por padrão.
+- Uvicorn foi iniciado temporariamente pelo script real, respondeu ao `/health` e ao `/login`, e foi encerrado após o teste.
 
 Testes complementares:
 

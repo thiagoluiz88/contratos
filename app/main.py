@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import (
@@ -19,6 +19,7 @@ from .config import (
     STATIC_DIR,
     TEMPLATES_DIR,
     UPLOAD_DIR,
+    ENABLE_SELF_REGISTRATION,
 )
 from .security import CSRFMiddleware
 from .database import SessionLocal
@@ -99,6 +100,7 @@ templates.env.globals["ADDITIVE_VIEW_PROFILES"] = ADDITIVE_VIEW_PROFILES
 templates.env.globals["ANALYSIS_VIEW_PROFILES"] = ANALYSIS_VIEW_PROFILES
 templates.env.globals["ANALYSIS_WRITE_PROFILES"] = ANALYSIS_WRITE_PROFILES
 templates.env.globals["FINANCIAL_PROFILES"] = FINANCIAL_PROFILES
+templates.env.globals["ENABLE_SELF_REGISTRATION"] = ENABLE_SELF_REGISTRATION
 SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".txt"}
 DEFAULT_OPERATOR_NAMES = []
 
@@ -257,7 +259,15 @@ def on_startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        security_logger.exception("Falha no health check do PostgreSQL")
+        return JSONResponse({"status": "error", "database": "unavailable"}, status_code=503)
+    finally:
+        db.close()
+    return {"status": "ok", "database": "ok"}
 
 
 def is_logged_in(request: Request) -> bool:
@@ -431,6 +441,8 @@ def login_submit(
 
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
+    if not ENABLE_SELF_REGISTRATION:
+        return forbidden_response(request, "Cadastro público desabilitado. Solicite acesso ao administrador.")
     if is_logged_in(request):
         return RedirectResponse("/dashboard", status_code=303)
 
@@ -457,6 +469,9 @@ def register_submit(
     password: str = Form(...),
     password_confirm: str = Form(...),
 ):
+    if not ENABLE_SELF_REGISTRATION:
+        return forbidden_response(request, "Cadastro público desabilitado. Solicite acesso ao administrador.")
+
     context = {
         "error": None,
         "username": username,

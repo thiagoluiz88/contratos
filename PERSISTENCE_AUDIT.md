@@ -42,8 +42,7 @@ Todas recebem dados, alteram objetos SQLAlchemy, executam commit e retornam resp
 
 ## Dados estáticos ou ainda sem gravação
 
-- `upload.html`, `alerts.html`, `comparison.html` e `compare_builder.html` são templates legados sem rota ativa.
-- `comparacoes.js` é um JavaScript legado e não é mais carregado pela tela atual.
+- Templates e JavaScript legados sem rota ativa foram removidos da árvore rastreada.
 - As opções de índice de reajuste, critérios de comparação e instruções de análise são configurações estáticas, não cadastros.
 - Dashboard, rankings e indicadores são calculados em memória a partir de dados reais do PostgreSQL; não precisam ser persistidos.
 - Os modelos `ContractAdjustment`, `RemunerationTable`, `RemunerationTableItem`, `MaterialsMedicinesRule`, `NegotiationMessage`, `ImportedContractRecord` e `ContractClause` não possuem telas/rotas completas de cadastro atualmente.

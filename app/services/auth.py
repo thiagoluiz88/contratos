@@ -21,6 +21,14 @@ INITIAL_ADMIN_PROFILE = PROFILE_ADMIN
 DEFAULT_REGISTER_PROFILE = PROFILE_READ_ONLY
 BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
 MIN_PASSWORD_LENGTH = 10
+DEFAULT_ACCESS_PROFILES = (
+    (PROFILE_ADMIN, "Full administrative access."),
+    (PROFILE_EXECUTIVE, "Executive visibility for strategic indicators."),
+    (PROFILE_CONTRACTS, "Contract management and operational access."),
+    (PROFILE_FINANCIAL, "Financial analysis and remuneration table access."),
+    (PROFILE_AUDIT, "Audit and compliance review access."),
+    (PROFILE_READ_ONLY, "Read-only access to contract information."),
+)
 ADMIN_PROFILES = {PROFILE_ADMIN}
 CONTRACT_WRITE_PROFILES = {PROFILE_ADMIN, PROFILE_CONTRACTS}
 ADDITIVE_VIEW_PROFILES = {PROFILE_ADMIN, PROFILE_CONTRACTS, PROFILE_AUDIT}
@@ -117,15 +125,16 @@ def record_auth_event(
 
 
 def ensure_initial_admin(db: Session) -> None:
+    for profile_name, description in DEFAULT_ACCESS_PROFILES:
+        profile_record = db.query(AccessProfile).filter(AccessProfile.name == profile_name).first()
+        if profile_record:
+            if not profile_record.description:
+                profile_record.description = description
+            continue
+        db.add(AccessProfile(name=profile_name, description=description, is_active=True))
+    db.flush()
+
     profile = get_access_profile(db, INITIAL_ADMIN_PROFILE)
-    if not profile:
-        profile = AccessProfile(
-            name=INITIAL_ADMIN_PROFILE,
-            description="Full administrative access.",
-            is_active=True,
-        )
-        db.add(profile)
-        db.flush()
 
     admin = db.query(User).filter(User.username == INITIAL_ADMIN_USERNAME).first()
     if admin:

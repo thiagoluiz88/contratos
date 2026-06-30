@@ -66,7 +66,9 @@
 
                 <div class="auth-tabs" aria-label="Acesso">
                     <a class="{% if not register_page %}active{% endif %}" href="/login">Entrar</a>
+                    {% if ENABLE_SELF_REGISTRATION %}
                     <a class="{% if register_page %}active{% endif %}" href="/register">Criar cadastro</a>
+                    {% endif %}
                 </div>
 
                 {% if error %}
@@ -100,7 +102,7 @@
                         <span>Senha</span>
                         <span class="auth-input">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-7-2a2 2 0 1 1 4 0v2h-4z"></path></svg>
-                            <input name="password" type="password" placeholder="Mínimo 8 caracteres" autocomplete="new-password" required>
+                            <input name="password" type="password" placeholder="Mínimo 10 caracteres" autocomplete="new-password" required>
                         </span>
                     </label>
                     <label>

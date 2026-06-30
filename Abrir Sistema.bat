@@ -31,6 +31,16 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
+echo Atualizando banco de dados...
+".venv\Scripts\python.exe" -m app.init_db
+if errorlevel 1 (
+    echo.
+    echo ERRO: nao foi possivel preparar o PostgreSQL e aplicar migrations.
+    echo Confira o arquivo .env e se o PostgreSQL esta em execucao.
+    pause
+    exit /b 1
+)
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" > "%OUT_FILE%" 2>&1
 set "START_EXIT=%ERRORLEVEL%"
 

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from app.config import MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIR
+from app.config import ENABLE_SELF_REGISTRATION, MAX_UPLOAD_SIZE_BYTES, UPLOAD_DIR
 from app.database import SessionLocal
 from app.main import app
 from app.models import AccessProfile, AuthAuditEvent, Contract, ImportBatch, Operator, User
@@ -78,14 +78,11 @@ def main() -> None:
             anonymous.headers["Origin"] = "http://testserver"
             expect(anonymous.post("/login", data={"username": f"disabled-{marker}", "password": PASSWORD}), 400, "usuário inativo")
             expect(anonymous.post("/login", data={"username": f"inactive-{marker}", "password": PASSWORD}), 400, "perfil inativo")
-            expect(
-                anonymous.post(
-                    "/register",
-                    data={"full_name": "Fraco", "email": f"weak-{marker}@example.local", "username": f"weak-{marker}", "password": "123", "password_confirm": "123"},
-                ),
-                400,
-                "senha fraca",
+            register_response = anonymous.post(
+                "/register",
+                data={"full_name": "Fraco", "email": f"weak-{marker}@example.local", "username": f"weak-{marker}", "password": "123", "password_confirm": "123"},
             )
+            expect(register_response, 400 if ENABLE_SELF_REGISTRATION else 403, "politica de cadastro publico")
         with TestClient(app, raise_server_exceptions=False) as error_client:
             response = error_client.get(error_path)
             expect(response, 500, "página amigável de erro")
@@ -158,8 +155,8 @@ def main() -> None:
             db.close()
 
         assert ".env" in Path(".gitignore").read_text(encoding="utf-8")
-        launchers = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in [Path("scripts/start_system.ps1"), Path("Abrir Sistema-1.bat")])
-        assert "127.0.0.1" in launchers and "0.0.0.0" not in launchers and "--reload" not in launchers
+        launchers = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in [Path("scripts/start_system.ps1"), Path("Abrir Sistema.bat")])
+        assert "127.0.0.1" in launchers and "--reload" not in launchers
         print("AUDITORIA DE SEGURANCA: OK")
     finally:
         db = SessionLocal()

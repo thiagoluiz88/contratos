@@ -3,6 +3,18 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $python = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $runDir = Join-Path $projectRoot ".codex-run"
+$envFile = Join-Path $projectRoot ".env"
+
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if (-not $line -or $line.StartsWith("#") -or -not $line.Contains("=")) { return }
+        $parts = $line.Split("=", 2)
+        if (-not [Environment]::GetEnvironmentVariable($parts[0], "Process")) {
+            [Environment]::SetEnvironmentVariable($parts[0], $parts[1], "Process")
+        }
+    }
+}
 
 if (-not (Test-Path $python)) {
     throw "Ambiente virtual nao encontrado em .venv. Execute: python -m venv .venv"
@@ -14,7 +26,10 @@ Get-ChildItem $runDir -Filter "uvicorn*.log" -ErrorAction SilentlyContinue | For
     Clear-Content -LiteralPath $_.FullName -ErrorAction SilentlyContinue
 }
 
-$port = 8000
+$hostName = if ($env:APP_HOST) { $env:APP_HOST } else { "127.0.0.1" }
+$publicHost = if ($env:APP_PUBLIC_HOST) { $env:APP_PUBLIC_HOST } elseif ($hostName -eq "0.0.0.0") { $env:COMPUTERNAME } else { $hostName }
+$probeHost = if ($hostName -eq "0.0.0.0") { "127.0.0.1" } else { $hostName }
+$port = if ($env:APP_PORT) { [int]$env:APP_PORT } else { 8000 }
 while ($port -lt 8100) {
     $inUse = netstat -ano | Select-String ":$port\s"
     if (-not $inUse) {
@@ -32,15 +47,15 @@ $stderr = Join-Path $runDir "uvicorn-$port.err.log"
 
 $process = Start-Process `
     -FilePath $python `
-    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$port" `
+    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "$hostName", "--port", "$port" `
     -WorkingDirectory $projectRoot `
     -RedirectStandardOutput $stdout `
     -RedirectStandardError $stderr `
     -WindowStyle Hidden `
     -PassThru
 
-$healthUrl = "http://127.0.0.1:$port/health"
-$loginUrl = "http://127.0.0.1:$port/login"
+$healthUrl = "http://$probeHost`:$port/health"
+$loginUrl = "http://$publicHost`:$port/login"
 $deadline = (Get-Date).AddSeconds(20)
 $successfulChecks = 0
 

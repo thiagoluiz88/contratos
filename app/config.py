@@ -22,6 +22,10 @@ SESSION_SECRET = os.getenv("APP_SECRET", "")
 SESSION_HTTPS_ONLY = env_bool("SESSION_HTTPS_ONLY", False)
 SESSION_MAX_AGE_SECONDS = int(os.getenv("SESSION_MAX_AGE_SECONDS", "28800"))
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(20 * 1024 * 1024)))
+ENABLE_SELF_REGISTRATION = env_bool("ENABLE_SELF_REGISTRATION", False)
+APP_HOST = os.getenv("APP_HOST", "127.0.0.1")
+APP_PORT = int(os.getenv("APP_PORT", "8000"))
+APP_PUBLIC_HOST = os.getenv("APP_PUBLIC_HOST", APP_HOST)
 
 if len(SESSION_SECRET) < 32 or SESSION_SECRET in {"contracts-intelligence-session-secret", "troque-esta-chave-por-uma-chave-forte"}:
     raise RuntimeError("APP_SECRET deve ser uma chave aleatoria forte com pelo menos 32 caracteres.")

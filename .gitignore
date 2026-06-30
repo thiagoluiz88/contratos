@@ -16,6 +16,7 @@ contracts.db
 *.sqlite3
 uploads/
 backups/
+legacy_backup/
 
 .DS_Store
 Thumbs.db
