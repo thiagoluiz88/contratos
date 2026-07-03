@@ -62,8 +62,12 @@
             {% if edit_mode %}
             <form method="post" action="/contracts/{{ contract.id }}/edit" class="form-grid two-cols">
                 <label><span>Nome do contrato</span><input name="contract_name" value="{{ form_data.contract_name }}" required></label>
+                <label><span>Tipo de contrato</span><input name="contract_type" value="{{ form_data.contract_type }}" placeholder="Convênio, pacote, prestação de serviços..."></label>
                 <label><span>Operadora</span><input name="operator_name" value="{{ form_data.operator_name }}"></label>
+                <label><span>Contrato mãe</span><select name="parent_contract_id"><option value="">Contrato principal</option>{% for parent in parent_options %}<option value="{{ parent.id }}" {% if form_data.parent_contract_id == parent.id %}selected{% endif %}>{{ parent.contract_name }}</option>{% endfor %}</select></label>
                 <label><span>Número do contrato</span><input name="contract_number" value="{{ form_data.contract_number }}"></label>
+                <label><span>Status</span><select name="status"><option value="active" {% if form_data.status == 'active' %}selected{% endif %}>Ativo</option><option value="draft" {% if form_data.status == 'draft' %}selected{% endif %}>Pendente</option><option value="inactive" {% if form_data.status == 'inactive' %}selected{% endif %}>Inativo</option></select></label>
+                <label><span>Responsável interno</span><input name="responsible_name" value="{{ form_data.responsible_name }}"></label>
                 <label><span>Data de assinatura</span><input type="date" name="signature_date" value="{{ form_data.signature_date }}"></label>
                 <label><span>Início da vigência</span><input type="date" name="start_date" value="{{ form_data.start_date }}"></label>
                 <label><span>Fim da vigência</span><input type="date" name="end_date" value="{{ form_data.end_date }}"></label>
@@ -81,6 +85,8 @@
                 <label class="checkbox"><input type="checkbox" name="reajust_clause_exists" {% if form_data.reajust_clause_exists %}checked{% endif %}><span>Há cláusula de reajuste</span></label>
                 <label><span>Periodicidade do reajuste</span><input name="reajust_frequency" value="{{ form_data.reajust_frequency }}"></label>
                 <label><span>Índice do reajuste</span><input name="reajust_index" value="{{ form_data.reajust_index }}"></label>
+                <label><span>Percentual de reajuste</span><input name="reajust_percentage" value="{{ form_data.reajust_percentage or '' }}" inputmode="decimal"></label>
+                <label><span>Data-base</span><input type="date" name="base_date" value="{{ form_data.base_date }}"></label>
                 <label><span>Tabela médica</span><input name="medical_fee_table" value="{{ form_data.medical_fee_table }}"></label>
                 <label><span>Versão da tabela médica</span><input name="medical_fee_table_version" value="{{ form_data.medical_fee_table_version }}"></label>
                 <label><span>Diárias e taxas</span><input name="daily_rate_table" value="{{ form_data.daily_rate_table }}"></label>
@@ -93,11 +99,13 @@
                 <label class="full"><span>Descrição do faturamento</span><textarea name="billing_deadline_description">{{ form_data.billing_deadline_description }}</textarea></label>
                 <label class="full"><span>Resumo da cláusula de glosa</span><textarea name="glosa_clause_summary">{{ form_data.glosa_clause_summary }}</textarea></label>
                 <label class="full"><span>Resumo da cláusula de reajuste</span><textarea name="reajust_clause_summary">{{ form_data.reajust_clause_summary }}</textarea></label>
+                <label class="full"><span>Observações</span><textarea name="observations">{{ form_data.observations }}</textarea></label>
                 <div class="full inline-actions"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Salvar revisão</button></div>
             </form>
             {% else %}
             <div class="contract-mini-grid analysis-grid">
                 <div><span>Objeto</span><strong>{{ contract.contract_object or 'Não identificado' }}</strong></div>
+                <div><span>Contrato mãe</span><strong>{{ contract.parent_contract.contract_name if contract.parent_contract else 'Contrato principal' }}</strong></div>
                 <div><span>Renovação</span><strong>{{ contract.renewal_details or ('Automática' if contract.auto_renewal else 'Sem renovação automática identificada') }}</strong></div>
                 <div><span>Pagamento</span><strong>{{ contract.payment_term_days or '-' }} dias{% if contract.payment_trigger %} &middot; {{ contract.payment_trigger }}{% endif %}</strong></div>
                 <div><span>Faturamento</span><strong>{{ contract.billing_deadline_days or '-' }} dias</strong></div>
@@ -124,6 +132,16 @@
                 <div class="full inline-actions"><button class="btn btn-secondary" type="submit"><i class="fa-solid fa-plus"></i> Registrar evento</button></div>
             </form>
             <div class="timeline-list">
+                {% for child in contract.child_contracts %}
+                <article class="timeline-item">
+                    <div class="timeline-icon"><i class="fa-solid fa-link"></i></div>
+                    <div>
+                        <strong>{{ child.contract_name }}</strong>
+                        <p class="muted">Documento filho · {{ child.contract_number or "Sem número" }}</p>
+                        <p>{{ child.contract_type or "Vínculo hierárquico preparado para aditivo ou documento relacionado." }}</p>
+                    </div>
+                </article>
+                {% endfor %}
                 {% for event in events %}
                 <article class="timeline-item">
                     <div class="timeline-icon"><i class="fa-solid fa-file-signature"></i></div>

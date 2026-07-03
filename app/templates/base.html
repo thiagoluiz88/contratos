@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token(request) }}">
-    <title>{{ title or "Painel Executivo" }} | Contracts Intelligence</title>
+    <title>{{ title or "Dashboard" }} | Gestão Inteligente de Contratos Hospitalares</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -21,34 +21,38 @@
                     </svg>
                 </span>
                 <span>
-                    <strong>Contracts Intelligence</strong>
-                    <small>Análise de Contratos Hospitalares</small>
+                    <strong>Contratos Hospitalares</strong>
+                    <small>Gestão Inteligente</small>
                 </span>
             </a>
 
             <nav class="side-nav">
-                {% if has_profile(user, ADMIN_PROFILES) or has_profile(user, ["Read Only"]) %}
-                <a class="nav-item {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard"><span>D</span>Painel Executivo</a>
+                {% if has_profile(user, ADMIN_PROFILES) or has_profile(user, ["Somente leitura"]) %}
+                <a class="nav-item {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard"><span>D</span>Dashboard</a>
                 {% endif %}
                 <a class="nav-item {% if active_page == 'contracts' %}active{% endif %}" href="/contracts"><span>C</span>Contratos</a>
+                <a class="nav-item {% if active_page == 'documents' %}active{% endif %}" href="/documents"><span>E</span>Documentos e Extração</a>
+                <a class="nav-item {% if active_page == 'operators' %}active{% endif %}" href="/operators"><span>O</span>Operadoras</a>
+                <a class="nav-item {% if active_page == 'contract_terms' %}active{% endif %}" href="/contract-terms"><span>T</span>Condições Contratuais</a>
                 {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
                 <a class="nav-item" href="/contracts/import"><span>U</span>Importar Contrato</a>
                 {% endif %}
                 {% if has_profile(user, ANALYSIS_VIEW_PROFILES) %}
-                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>A</span>Análise de Contratos</a>
+                <a class="nav-item {% if active_page == 'analises_ia' %}active{% endif %}" href="/analises-ia"><span>A</span>Análise IA</a>
                 {% endif %}
                 {% if has_profile(user, FINANCIAL_PROFILES) %}
                 <a class="nav-item {% if active_page == 'comparacoes' %}active{% endif %}" href="/comparacoes"><span>F</span>Comparações</a>
                 {% endif %}
-                {% if has_profile(user, ADDITIVE_VIEW_PROFILES) %}
-                <a class="nav-item {% if active_page == 'aditivos' %}active{% endif %}" href="/aditivos"><span>T</span>Aditivos</a>
+                {% if has_profile(user, ADDITIVE_VIEW_PROFILES) or has_profile(user, FINANCIAL_PROFILES) %}
+                <a class="nav-item {% if active_page == 'adjustments' %}active{% endif %}" href="/adjustments"><span>R</span>Reajustes e Aditivos</a>
                 {% endif %}
                 {% if has_profile(user, AUDIT_PROFILES) %}
-                <a class="nav-item {% if active_page == 'auth_audit_events' %}active{% endif %}" href="/auth-audit-events"><span>L</span>Auditoria</a>
+                <a class="nav-item {% if active_page in ['audit_logs', 'auth_audit_events'] %}active{% endif %}" href="/audit-logs"><span>L</span>Auditoria</a>
                 {% endif %}
                 {% if has_profile(user, ADMIN_PROFILES) %}
                 <a class="nav-item {% if active_page == 'users' %}active{% endif %}" href="/users"><span>U</span>Usuários</a>
                 <a class="nav-item {% if active_page == 'access_profiles' %}active{% endif %}" href="/access-profiles"><span>P</span>Perfis</a>
+                <a class="nav-item {% if active_page == 'settings' %}active{% endif %}" href="/settings"><span>G</span>Configurações</a>
                 {% endif %}
                 <a class="nav-item {% if active_page == 'change_password' %}active{% endif %}" href="/change-password"><span>S</span>Trocar senha</a>
             </nav>

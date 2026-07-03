@@ -11,23 +11,23 @@ from app.models import AccessProfile, AuthAuditEvent, User
 INITIAL_ADMIN_EMAIL = "admin@contracts.local"
 INITIAL_ADMIN_NAME = "Administrador"
 INITIAL_ADMIN_USERNAME = "admin"
-PROFILE_ADMIN = "Administrator"
-PROFILE_EXECUTIVE = "Executive Board"
-PROFILE_CONTRACTS = "Contracts"
-PROFILE_FINANCIAL = "Financial"
-PROFILE_AUDIT = "Audit"
-PROFILE_READ_ONLY = "Read Only"
+PROFILE_ADMIN = "Administrador"
+PROFILE_EXECUTIVE = "Diretoria"
+PROFILE_CONTRACTS = "Contratos"
+PROFILE_FINANCIAL = "Financeiro"
+PROFILE_AUDIT = "Auditoria"
+PROFILE_READ_ONLY = "Somente leitura"
 INITIAL_ADMIN_PROFILE = PROFILE_ADMIN
 DEFAULT_REGISTER_PROFILE = PROFILE_READ_ONLY
 BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
 MIN_PASSWORD_LENGTH = 10
 DEFAULT_ACCESS_PROFILES = (
-    (PROFILE_ADMIN, "Full administrative access."),
-    (PROFILE_EXECUTIVE, "Executive visibility for strategic indicators."),
-    (PROFILE_CONTRACTS, "Contract management and operational access."),
-    (PROFILE_FINANCIAL, "Financial analysis and remuneration table access."),
-    (PROFILE_AUDIT, "Audit and compliance review access."),
-    (PROFILE_READ_ONLY, "Read-only access to contract information."),
+    (PROFILE_ADMIN, "Acesso administrativo completo."),
+    (PROFILE_EXECUTIVE, "Visao executiva para diretoria."),
+    (PROFILE_CONTRACTS, "Gestao operacional de contratos."),
+    (PROFILE_FINANCIAL, "Analise financeira e condicoes comerciais."),
+    (PROFILE_AUDIT, "Auditoria e conformidade."),
+    (PROFILE_READ_ONLY, "Acesso somente leitura."),
 )
 ADMIN_PROFILES = {PROFILE_ADMIN}
 CONTRACT_WRITE_PROFILES = {PROFILE_ADMIN, PROFILE_CONTRACTS}

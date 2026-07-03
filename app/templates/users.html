@@ -32,7 +32,7 @@
                     <td class="admin-actions">
                         <a class="secondary-action" href="/users/{{ item.id }}/edit">Editar</a>
                         <a class="secondary-action" href="/users/{{ item.id }}/reset-password">Resetar senha</a>
-                        {% if item.is_active and item.profile != "Administrator" %}
+                        {% if item.is_active and item.profile != "Administrador" %}
                         <form method="post" action="/users/{{ item.id }}/make-admin">
                             <button class="secondary-action" type="submit">Tornar administrador</button>
                         </form>

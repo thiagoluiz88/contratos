@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>{{ document.original_filename }}</h1>
+        <p>Documento vinculado ao contrato {{ document.contract.contract_name }}.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="secondary-action" href="/documents">Voltar</a>
+        <a class="secondary-action" href="/documents/{{ document.id }}/download">Abrir original</a>
+        <a class="primary-button compact" href="/documents/{{ document.id }}/validate">Validar</a>
+    </div>
+</header>
+
+<section class="stats-grid four-inline">
+    <article class="mini-card"><span>Tipo</span><strong>{{ document.document_type or document.file_type }}</strong></article>
+    <article class="mini-card"><span>Status</span><strong>{{ document.processing_status }}</strong></article>
+    <article class="mini-card"><span>Extração</span><strong>{{ extraction.review_status if extraction else "pendente" }}</strong></article>
+    <article class="mini-card"><span>Enviado por</span><strong>{{ document.uploaded_by or "-" }}</strong></article>
+</section>
+
+<section class="panel">
+    <div class="contract-mini-grid analysis-grid">
+        <div><span>Arquivo original</span><strong>{{ document.original_filename }}</strong></div>
+        <div><span>Tamanho</span><strong>{{ document.file_size_bytes or "-" }} bytes</strong></div>
+        <div><span>Processado em</span><strong>{{ document.processed_at or "-" }}</strong></div>
+        <div><span>Aprovado por</span><strong>{{ document.approved_by or "-" }}</strong></div>
+        <div><span>Método de extração</span><strong>{{ extraction.extraction_method if extraction else document.extraction_method or "-" }}</strong></div>
+        <div><span>Páginas</span><strong>{{ extraction.page_count if extraction and extraction.page_count is not none else "-" }}</strong></div>
+        <div><span>Caracteres extraídos</span><strong>{{ extraction.character_count if extraction else 0 }}</strong></div>
+        <div><span>Avisos de extração</span><strong>{{ extraction.extraction_warnings if extraction and extraction.extraction_warnings else "-" }}</strong></div>
+        <div><span>Observações</span><strong>{{ document.notes or "-" }}</strong></div>
+        <div><span>Erro</span><strong>{{ document.error_message or "-" }}</strong></div>
+    </div>
+</section>
+
+{% if extraction and extraction.extracted_text_preview %}
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Prévia do texto extraído</h2><p>Texto extraído automaticamente para apoio à conferência.</p></div></div>
+    <pre class="text-preview">{{ extraction.extracted_text_preview }}</pre>
+</section>
+{% endif %}
+{% endblock %}

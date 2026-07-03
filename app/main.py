@@ -4,7 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -25,13 +25,17 @@ from .security import CSRFMiddleware
 from .database import SessionLocal
 from .models import (
     AccessProfile,
+    AuditLog,
     AuthAuditEvent,
     Contract,
     ContractAdditive,
+    ContractAdjustment,
     ContractComparison,
     ContractComparisonItem,
     ContractEvent,
+    ContractExtraction,
     ContractFile,
+    ContractTerm,
     ImportBatch,
     Operator,
     User,
@@ -129,8 +133,12 @@ def parse_optional_int(value: str | None) -> int | None:
 def contract_form_data(contract: Contract) -> dict:
     fields = (
         "contract_name",
+        "parent_contract_id",
+        "contract_type",
         "operator_name",
         "contract_number",
+        "status",
+        "responsible_name",
         "contract_object",
         "signature_date",
         "start_date",
@@ -152,7 +160,10 @@ def contract_form_data(contract: Contract) -> dict:
         "reajust_clause_exists",
         "reajust_frequency",
         "reajust_index",
+        "reajust_percentage",
+        "base_date",
         "reajust_clause_summary",
+        "observations",
         "medical_fee_table",
         "medical_fee_table_version",
         "daily_rate_table",
@@ -162,12 +173,17 @@ def contract_form_data(contract: Contract) -> dict:
         "medicines_table_version",
     )
     data = {field: getattr(contract, field) for field in fields}
-    for field in ("signature_date", "start_date", "end_date"):
+    data["parent_contract_id"] = data["parent_contract_id"] or ""
+    for field in ("signature_date", "start_date", "end_date", "base_date"):
         data[field] = data[field].isoformat() if data[field] else ""
     return data
 
 
 def contract_status(contract: Contract) -> tuple[str, str]:
+    if getattr(contract, "status", "active") == "inactive":
+        return "Inativo", "expired"
+    if getattr(contract, "status", "active") == "draft":
+        return "Pendente", "warning"
     if not contract.end_date:
         return "Importado", "imported"
 
@@ -320,6 +336,32 @@ def current_username(request: Request) -> str | None:
     return request.session.get("user", {}).get("username")
 
 
+def record_audit_log(
+    db,
+    request: Request,
+    action: str,
+    *,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    success: bool = True,
+    details: str | None = None,
+) -> None:
+    session_user = request.session.get("user") or {}
+    db.add(
+        AuditLog(
+            user_id=session_user.get("id"),
+            username=session_user.get("username"),
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            success=success,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            details=details,
+        )
+    )
+
+
 def csrf_token(request: Request) -> str:
     return request.session.get("csrf_token", "")
 
@@ -345,6 +387,64 @@ def active_admin_count(db) -> int:
         .filter(User.is_active.is_(True), AccessProfile.name == PROFILE_ADMIN, AccessProfile.is_active.is_(True))
         .count()
     )
+
+
+def latest_extraction_for_file(db, contract_file_id: int) -> ContractExtraction | None:
+    return (
+        db.query(ContractExtraction)
+        .filter(ContractExtraction.contract_file_id == contract_file_id)
+        .order_by(ContractExtraction.created_at.desc())
+        .first()
+    )
+
+
+def extraction_payload_from_form(form) -> dict:
+    return {
+        "raw_text_available": None,
+        "candidate_sections": [],
+        "pending_ai_analysis": True,
+        "contrato": {
+            "operadora": str(form.get("contrato_operadora", "")).strip() or None,
+            "numero_contrato": str(form.get("contrato_numero", "")).strip() or None,
+            "tipo_contrato": str(form.get("contrato_tipo", "")).strip() or None,
+            "data_inicio": str(form.get("contrato_data_inicio", "")).strip() or None,
+            "data_fim": str(form.get("contrato_data_fim", "")).strip() or None,
+            "data_base_reajuste": str(form.get("contrato_data_base", "")).strip() or None,
+            "indice_reajuste": str(form.get("contrato_indice", "")).strip() or None,
+            "percentual_reajuste": str(form.get("contrato_percentual", "")).strip() or None,
+        },
+        "clausulas_criticas": {
+            "prazo_faturamento": str(form.get("clausula_prazo_faturamento", "")).strip() or None,
+            "prazo_recurso_glosa": str(form.get("clausula_prazo_recurso_glosa", "")).strip() or None,
+            "regras_glosa": str(form.get("clausula_regras_glosa", "")).strip() or None,
+            "regras_autorizacao": str(form.get("clausula_regras_autorizacao", "")).strip() or None,
+            "multas": str(form.get("clausula_multas", "")).strip() or None,
+            "auditoria": str(form.get("clausula_auditoria", "")).strip() or None,
+        },
+        "condicoes_contratuais": [
+            {
+                "categoria": str(form.get("condicao_categoria", "")).strip() or None,
+                "item": str(form.get("condicao_item", "")).strip() or None,
+                "descricao": str(form.get("condicao_descricao", "")).strip() or None,
+                "valor": str(form.get("condicao_valor", "")).strip() or None,
+                "unidade": str(form.get("condicao_unidade", "")).strip() or None,
+                "vigencia_inicio": str(form.get("condicao_vigencia_inicio", "")).strip() or None,
+                "vigencia_fim": str(form.get("condicao_vigencia_fim", "")).strip() or None,
+            }
+        ],
+    }
+
+
+def extraction_section(payload: dict | None, section: str) -> dict:
+    value = (payload or {}).get(section)
+    return value if isinstance(value, dict) else {}
+
+
+def first_extracted_condition(payload: dict | None) -> dict:
+    rows = (payload or {}).get("condicoes_contratuais")
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        return rows[0]
+    return {}
 
 
 def render_user_form(
@@ -407,6 +507,7 @@ def login_submit(
             request.session["last_seen"] = datetime.utcnow().isoformat()
             request.session["csrf_token"] = csrf_token(request) or __import__("secrets").token_urlsafe(32)
             record_auth_event(db, "login", user=user, request=request, success=True)
+            record_audit_log(db, request, "login", entity_type="user", entity_id=user.id, details=user.username)
             db.commit()
             return RedirectResponse("/dashboard", status_code=303)
 
@@ -419,6 +520,7 @@ def login_submit(
             success=False,
             notes="Usuário inativo, perfil inativo ou credenciais inválidas.",
         )
+        record_audit_log(db, request, "login_failed", entity_type="user", entity_id=user.id if user else None, success=False, details=username)
         db.commit()
     except SQLAlchemyError:
         db.rollback()
@@ -522,7 +624,7 @@ def register_submit(
 
     db = SessionLocal()
     try:
-        profile = get_access_profile(db, DEFAULT_REGISTER_PROFILE) or get_access_profile(db, "Administrator")
+        profile = get_access_profile(db, DEFAULT_REGISTER_PROFILE) or get_access_profile(db, PROFILE_ADMIN)
         user = User(
             username=username,
             email=email,
@@ -724,6 +826,7 @@ def user_new_submit(
         db.add(user_record)
         db.flush()
         record_auth_event(db, "user_created", user=user_record, username=user_record.username, request=request, notes=f"Criado por {current_username(request)}.")
+        record_audit_log(db, request, "user_created", entity_type="user", entity_id=user_record.id, details=user_record.username)
         db.commit()
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError as exc:
@@ -781,9 +884,10 @@ def user_edit_submit(
         user_record.is_active = bool(is_active)
         if old_profile_id != access_profile_id and active_admin_count(db) == 0:
             db.rollback()
-            return render_user_form(request, user_record=user_record, profiles=profiles, error="Não é permitido remover o último Administrator ativo.", status_code=400)
+            return render_user_form(request, user_record=user_record, profiles=profiles, error="Não é permitido remover o último Administrador ativo.", status_code=400)
 
         record_auth_event(db, "user_updated", user=user_record, username=user_record.username, request=request, notes=f"Atualizado por {current_username(request)}.")
+        record_audit_log(db, request, "user_updated", entity_type="user", entity_id=user_record.id, details=user_record.username)
         db.commit()
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError as exc:
@@ -806,9 +910,10 @@ def user_deactivate(request: Request, user_id: int):
         if user_record.id == request.session.get("user", {}).get("id"):
             return forbidden_response(request, "Você não pode desativar o próprio usuário.")
         if user_record.access_profile and user_record.access_profile.name == PROFILE_ADMIN and active_admin_count(db) <= 1:
-            return forbidden_response(request, "Não é permitido desativar o último Administrator ativo.")
+            return forbidden_response(request, "Não é permitido desativar o último Administrador ativo.")
         user_record.is_active = False
         record_auth_event(db, "user_deactivated", user=user_record, username=user_record.username, request=request, notes=f"Desativado por {current_username(request)}.")
+        record_audit_log(db, request, "user_deactivated", entity_type="user", entity_id=user_record.id, details=user_record.username)
         db.commit()
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError:
@@ -830,7 +935,7 @@ def user_make_admin(request: Request, user_id: int):
         if not user_record:
             return RedirectResponse("/users", status_code=303)
         if not admin_profile:
-            return forbidden_response(request, "Perfil Administrator não encontrado ou inativo.")
+            return forbidden_response(request, "Perfil Administrador não encontrado ou inativo.")
         if user_record.access_profile_id == admin_profile.id:
             return RedirectResponse("/users", status_code=303)
 
@@ -842,8 +947,9 @@ def user_make_admin(request: Request, user_id: int):
             user=user_record,
             username=user_record.username,
             request=request,
-            notes=f"Promovido a Administrator por {current_username(request)}.",
+            notes=f"Promovido a Administrador por {current_username(request)}.",
         )
+        record_audit_log(db, request, "user_profile_changed", entity_type="user", entity_id=user_record.id, details=f"{user_record.username} -> {PROFILE_ADMIN}")
         db.commit()
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError:
@@ -890,6 +996,7 @@ def user_reset_password_submit(
             return render_user_form(request, user_record=user_record, reset_password=True, error="As senhas não conferem.", status_code=400)
         user_record.password_hash = hash_password(password)
         record_auth_event(db, "password_reset", user=user_record, username=user_record.username, request=request, notes=f"Reset por {current_username(request)}.")
+        record_audit_log(db, request, "user_password_reset", entity_type="user", entity_id=user_record.id, details=user_record.username)
         db.commit()
         return RedirectResponse("/users", status_code=303)
     except SQLAlchemyError:
@@ -955,6 +1062,7 @@ def access_profile_new_submit(request: Request, name: str = Form(...), descripti
         db.add(profile)
         db.flush()
         record_auth_event(db, "access_profile_created", username=current_username(request), request=request, notes=f"Perfil criado: {profile.name}.")
+        record_audit_log(db, request, "access_profile_created", entity_type="access_profile", entity_id=profile.id, details=profile.name)
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
     except SQLAlchemyError:
@@ -996,8 +1104,9 @@ def access_profile_edit_submit(request: Request, profile_id: int, name: str = Fo
         profile.is_active = bool(is_active)
         if profile.name == PROFILE_ADMIN and not profile.is_active and active_admin_count(db) > 0:
             db.rollback()
-            return render_profile_form(request, profile=profile, error="Não é permitido desativar o perfil Administrator.", status_code=400)
+            return render_profile_form(request, profile=profile, error="Não é permitido desativar o perfil Administrador.", status_code=400)
         record_auth_event(db, "access_profile_updated", username=current_username(request), request=request, notes=f"Perfil atualizado: {profile.name}.")
+        record_audit_log(db, request, "access_profile_updated", entity_type="access_profile", entity_id=profile.id, details=profile.name)
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
     except SQLAlchemyError:
@@ -1018,9 +1127,10 @@ def access_profile_deactivate(request: Request, profile_id: int):
         if not profile:
             return RedirectResponse("/access-profiles", status_code=303)
         if profile.name == PROFILE_ADMIN:
-            return forbidden_response(request, "Não é permitido desativar o perfil Administrator.")
+            return forbidden_response(request, "Não é permitido desativar o perfil Administrador.")
         profile.is_active = False
         record_auth_event(db, "access_profile_deactivated", username=current_username(request), request=request, notes=f"Perfil desativado: {profile.name}.")
+        record_audit_log(db, request, "access_profile_deactivated", entity_type="access_profile", entity_id=profile.id, details=profile.name)
         db.commit()
         return RedirectResponse("/access-profiles", status_code=303)
     except SQLAlchemyError:
@@ -1098,6 +1208,7 @@ def logout(request: Request):
         try:
             user = db.query(User).filter(User.username == username).first()
             record_auth_event(db, "logout", user=user, username=username, request=request, success=True)
+            record_audit_log(db, request, "logout", entity_type="user", entity_id=user.id if user else None, details=username)
             db.commit()
         except SQLAlchemyError:
             db.rollback()
@@ -1134,8 +1245,10 @@ def dashboard(request: Request):
         active_contracts = 0
         due_30 = 0
         due_60 = 0
+        due_90 = 0
         expired = 0
         no_adjustment = 0
+        pending_documents = 0
         score_sum = 0
         scored_count = 0
         operator_counts = {}
@@ -1159,6 +1272,8 @@ def dashboard(request: Request):
         attention_rows = []
 
         for contract in contracts_from_db:
+            if contract.status == "inactive":
+                continue
             operator_name = contract.operator_name or "Operadora não informada"
             operator_counts[operator_name] = operator_counts.get(operator_name, 0) + 1
 
@@ -1178,6 +1293,8 @@ def dashboard(request: Request):
 
             if not (contract.reajust_index or contract.adjustment_type):
                 no_adjustment += 1
+            if not contract.files and not contract.stored_filepath:
+                pending_documents += 1
 
             if contract.end_date:
                 days_left = (contract.end_date - today).days
@@ -1198,6 +1315,7 @@ def dashboard(request: Request):
                 elif days_left <= 30:
                     due_30 += 1
                     due_60 += 1
+                    due_90 += 1
                     active_contracts += 1
                     status_counts["Vencendo"] += 1
                     expiration_counts["Ate 30 dias"] += 1
@@ -1213,6 +1331,7 @@ def dashboard(request: Request):
                     )
                 elif days_left <= 60:
                     due_60 += 1
+                    due_90 += 1
                     active_contracts += 1
                     status_counts["Vencendo"] += 1
                     expiration_counts["31 a 60 dias"] += 1
@@ -1230,6 +1349,7 @@ def dashboard(request: Request):
                     active_contracts += 1
                     status_counts["Ativos"] += 1
                     if days_left <= 90:
+                        due_90 += 1
                         expiration_counts["61 a 90 dias"] += 1
                     elif days_left <= 120:
                         expiration_counts["91 a 120 dias"] += 1
@@ -1310,8 +1430,10 @@ def dashboard(request: Request):
             "active_contracts": active_contracts,
             "due_30": due_30,
             "due_60": due_60,
+            "due_90": due_90,
             "expired": expired,
             "no_adjustment": no_adjustment,
+            "pending_documents": pending_documents,
             "average_score": round(score_sum / scored_count) if scored_count else 0,
             "additive_count": additive_count,
             "pending_additives": pending_additives,
@@ -1443,6 +1565,7 @@ def contract_detail(request: Request, contract_id: int, edit: int = 0):
                 "contract": contract,
                 "edit_mode": bool(edit),
                 "form_data": contract_form_data(contract),
+                "parent_options": db.query(Contract).filter(Contract.id != contract_id, Contract.status != "inactive").order_by(Contract.contract_name.asc()).all(),
                 "events": db.query(ContractEvent).filter(ContractEvent.contract_id == contract_id).order_by(ContractEvent.created_at.desc()).all(),
                 "peer_contracts": peers,
                 "days_until_end": days_until_end,
@@ -1476,11 +1599,12 @@ async def contract_edit_submit(request: Request, contract_id: int):
             return RedirectResponse("/contracts", status_code=303)
 
         text_fields = (
-            "contract_name", "operator_name", "contract_number", "contract_object", "renewal_details",
+            "contract_name", "contract_type", "operator_name", "contract_number", "status", "responsible_name",
+            "contract_object", "renewal_details",
             "payment_trigger", "billing_deadline_description", "glosa_clause_summary", "reajust_frequency",
             "reajust_index", "reajust_clause_summary", "medical_fee_table", "medical_fee_table_version",
             "daily_rate_table", "materials_table", "materials_table_version", "medicines_table",
-            "medicines_table_version",
+            "medicines_table_version", "observations",
         )
         integer_fields = (
             "termination_notice_days", "payment_term_days", "billing_deadline_days", "glosa_deadline_days",
@@ -1492,10 +1616,16 @@ async def contract_edit_submit(request: Request, contract_id: int):
         )
         for field in text_fields:
             setattr(contract, field, str(form.get(field, "")).strip() or None)
+        if not contract.status:
+            contract.status = "active"
+        parent_contract_id = parse_optional_int(form.get("parent_contract_id"))
+        contract.parent_contract_id = parent_contract_id if parent_contract_id != contract.id else None
         for field in integer_fields:
             setattr(contract, field, parse_optional_int(form.get(field)))
-        for field in ("signature_date", "start_date", "end_date"):
+        for field in ("signature_date", "start_date", "end_date", "base_date"):
             setattr(contract, field, parse_optional_date(form.get(field)))
+        percentage = str(form.get("reajust_percentage", "")).replace(",", ".").strip()
+        contract.reajust_percentage = float(percentage) if percentage else None
         for field in boolean_fields:
             setattr(contract, field, field in form)
 
@@ -1512,6 +1642,7 @@ async def contract_edit_submit(request: Request, contract_id: int):
         for field, value in scoring.items():
             setattr(contract, field, value)
         record_auth_event(db, "contract_updated", username=current_username(request), request=request, notes=f"Contrato #{contract.id} atualizado.")
+        record_audit_log(db, request, "contract_updated", entity_type="contract", entity_id=contract.id, details=contract.contract_name)
         db.commit()
         return RedirectResponse(f"/contracts/{contract.id}", status_code=303)
     except (SQLAlchemyError, ValueError) as exc:
@@ -1567,8 +1698,9 @@ def contract_delete(request: Request, contract_id: int):
         if not contract:
             return RedirectResponse("/contracts", status_code=303)
         name = contract.contract_name
-        db.delete(contract)
-        record_auth_event(db, "contract_deleted", username=current_username(request), request=request, notes=f"Contrato #{contract_id} excluído: {name}.")
+        contract.status = "inactive"
+        record_auth_event(db, "contract_inactivated", username=current_username(request), request=request, notes=f"Contrato #{contract_id} inativado: {name}.")
+        record_audit_log(db, request, "contract_inactivated", entity_type="contract", entity_id=contract.id, details=name)
         db.commit()
         return RedirectResponse("/contracts", status_code=303)
     except SQLAlchemyError as exc:
@@ -1620,6 +1752,284 @@ def contract_additional_page(request: Request, contract_id: int, saved: int = 0)
                 ],
             },
         )
+    finally:
+        db.close()
+
+
+@app.get("/documents", response_class=HTMLResponse)
+def documents_page(request: Request, contract_id: int | None = None):
+    if redirect := require_login(request):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        query = db.query(ContractFile).join(Contract).order_by(ContractFile.created_at.desc())
+        if contract_id:
+            query = query.filter(ContractFile.contract_id == contract_id)
+        documents = query.all()
+        return templates.TemplateResponse(
+            request,
+            "documents.html",
+            {
+                "title": "Documentos e Extração",
+                "active_page": "documents",
+                "user": request.session.get("user"),
+                "documents": documents,
+                "contracts": db.query(Contract).filter(Contract.status != "inactive").order_by(Contract.contract_name.asc()).all(),
+                "selected_contract_id": contract_id,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/contracts/{contract_id:int}/documents")
+def contract_documents_alias(request: Request, contract_id: int):
+    return RedirectResponse(f"/documents?contract_id={contract_id}", status_code=303)
+
+
+@app.post("/documents/upload")
+async def document_upload(
+    request: Request,
+    contract_id: int = Form(...),
+    document_type: str = Form(default="contrato"),
+    file: UploadFile = File(...),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil não permite enviar documentos."):
+        return redirect
+
+    from .services.document_processing_service import DocumentProcessingError, process_uploaded_document
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return JSONResponse({"error": "Contrato não encontrado."}, status_code=404)
+        record_audit_log(db, request, "document_processing_started", entity_type="contract", entity_id=contract.id, details=file.filename)
+        record_audit_log(db, request, "text_extraction_started", entity_type="contract", entity_id=contract.id, details=file.filename)
+        processed = await process_uploaded_document(
+            db,
+            contract_id=contract.id,
+            document_type=document_type,
+            file=file,
+            username=current_username(request),
+        )
+        record_audit_log(db, request, "document_uploaded", entity_type="contract_file", entity_id=processed.contract_file.id, details=processed.contract_file.original_filename)
+        if processed.extraction.extracted_text:
+            record_audit_log(
+                db,
+                request,
+                "text_extracted",
+                entity_type="contract_extraction",
+                entity_id=processed.extraction.id,
+                details=f"{processed.extraction.character_count} caracteres via {processed.extraction.extraction_method or 'parser local'}",
+            )
+        elif processed.extraction.extraction_warnings:
+            action = "ocr_not_configured" if "OCR local não configurado" in processed.extraction.extraction_warnings else "no_text_detected"
+            record_audit_log(db, request, action, entity_type="contract_extraction", entity_id=processed.extraction.id, details=processed.extraction.extraction_warnings)
+        record_audit_log(db, request, "document_sent_to_validation", entity_type="contract_extraction", entity_id=processed.extraction.id, details="Extração pendente de validação humana.")
+        db.commit()
+        return RedirectResponse(f"/documents/{processed.contract_file.id}/validate", status_code=303)
+    except DocumentProcessingError as exc:
+        db.rollback()
+        db = SessionLocal()
+        try:
+            record_audit_log(db, request, "document_processing_error", entity_type="contract", entity_id=contract_id, success=False, details=str(exc))
+            record_audit_log(db, request, "text_extraction_error", entity_type="contract", entity_id=contract_id, success=False, details=str(exc))
+            db.commit()
+        finally:
+            db.close()
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível gravar o documento."}, status_code=500)
+    finally:
+        db.close()
+
+
+@app.get("/documents/{document_id:int}", response_class=HTMLResponse)
+def document_detail(request: Request, document_id: int):
+    if redirect := require_login(request):
+        return redirect
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "document_detail.html",
+            {
+                "title": "Documento",
+                "active_page": "documents",
+                "user": request.session.get("user"),
+                "document": document,
+                "extraction": latest_extraction_for_file(db, document.id),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/documents/{document_id:int}/download")
+def document_download(request: Request, document_id: int):
+    if redirect := require_login(request):
+        return redirect
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        path = Path(document.stored_filepath)
+        if not path.exists() or not path.is_file():
+            return JSONResponse({"error": "Arquivo não encontrado."}, status_code=404)
+        return FileResponse(path, filename=document.original_filename, media_type=document.mime_type or "application/octet-stream")
+    finally:
+        db.close()
+
+
+@app.get("/documents/{document_id:int}/validate", response_class=HTMLResponse)
+def document_validate_page(request: Request, document_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil não permite validar documentos."):
+        return redirect
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction:
+            extraction = ContractExtraction(
+                contract_file_id=document.id,
+                contract_id=document.contract_id,
+                extraction_status="aguardando_validacao",
+                extracted_json={},
+                extraction_source="manual",
+                created_by=current_username(request),
+            )
+            db.add(extraction)
+            db.commit()
+            db.refresh(extraction)
+        record_audit_log(db, request, "validation_opened", entity_type="contract_extraction", entity_id=extraction.id, details=document.original_filename)
+        db.commit()
+        payload = extraction.extracted_json or {}
+        return templates.TemplateResponse(
+            request,
+            "document_validate.html",
+            {
+                "title": "Validação humana",
+                "active_page": "documents",
+                "user": request.session.get("user"),
+                "document": document,
+                "extraction": extraction,
+                "contract_data": extraction_section(payload, "contrato"),
+                "clause_data": extraction_section(payload, "clausulas_criticas"),
+                "condition_data": first_extracted_condition(payload),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/documents/{document_id:int}/validate")
+async def document_validate_save(request: Request, document_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil não permite salvar validação."):
+        return redirect
+    form = await request.form()
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction:
+            extraction = ContractExtraction(contract_file_id=document.id, contract_id=document.contract_id, extraction_status="pendente", review_status="pendente")
+            db.add(extraction)
+            db.flush()
+        payload = extraction_payload_from_form(form)
+        payload["raw_text_available"] = bool(extraction.extracted_text)
+        extraction.extracted_json = payload
+        extraction.extraction_status = "aguardando_validacao"
+        extraction.review_status = "em_revisao"
+        extraction.review_notes = str(form.get("review_notes", "")).strip() or None
+        document.processing_status = "aguardando_validacao"
+        record_audit_log(db, request, "extraction_review_saved", entity_type="contract_extraction", entity_id=extraction.id, details=document.original_filename)
+        record_audit_log(db, request, "extracted_fields_updated", entity_type="contract_extraction", entity_id=extraction.id, details="Campos extraídos ajustados manualmente.")
+        db.commit()
+        return RedirectResponse(f"/documents/{document.id}/validate?saved=1", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível salvar a revisão."}, status_code=500)
+    finally:
+        db.close()
+
+
+@app.post("/documents/{document_id:int}/approve")
+async def document_approve(request: Request, document_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil não permite aprovar extrações."):
+        return redirect
+    form = await request.form()
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction:
+            return JSONResponse({"error": "Não há extração para aprovar."}, status_code=400)
+        if form:
+            payload = extraction_payload_from_form(form)
+            payload["raw_text_available"] = bool(extraction.extracted_text)
+            extraction.extracted_json = payload
+        now = datetime.utcnow()
+        extraction.review_status = "aprovado"
+        extraction.extraction_status = "aprovado"
+        extraction.reviewed_by = current_username(request)
+        extraction.reviewed_at = now
+        extraction.review_notes = str(form.get("review_notes", "")).strip() or extraction.review_notes
+        document.processing_status = "aprovado"
+        document.extraction_status = "aprovado"
+        document.approved_by = current_username(request)
+        document.approved_at = now
+        record_audit_log(db, request, "extraction_approved", entity_type="contract_extraction", entity_id=extraction.id, details=document.original_filename)
+        db.commit()
+        return RedirectResponse(f"/documents/{document.id}", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível aprovar a extração."}, status_code=500)
+    finally:
+        db.close()
+
+
+@app.post("/documents/{document_id:int}/reject")
+async def document_reject(request: Request, document_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil não permite rejeitar extrações."):
+        return redirect
+    form = await request.form()
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction:
+            return JSONResponse({"error": "Não há extração para rejeitar."}, status_code=400)
+        reason = str(form.get("review_notes", "")).strip() or "Extração rejeitada na validação humana."
+        now = datetime.utcnow()
+        extraction.review_status = "rejeitado"
+        extraction.extraction_status = "rejeitado"
+        extraction.reviewed_by = current_username(request)
+        extraction.reviewed_at = now
+        extraction.review_notes = reason
+        document.processing_status = "rejeitado"
+        document.extraction_status = "rejeitado"
+        document.error_message = reason
+        record_audit_log(db, request, "extraction_rejected", entity_type="contract_extraction", entity_id=extraction.id, details=reason)
+        db.commit()
+        return RedirectResponse(f"/documents/{document.id}", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível rejeitar a extração."}, status_code=500)
     finally:
         db.close()
 
@@ -1788,9 +2198,14 @@ async def import_contract(
                 extracted_text=raw_text,
                 extraction_status=extraction_status,
                 extraction_method=extraction_method,
+                processing_status="processed" if extraction_status == "completed" else "error",
+                processed_at=datetime.utcnow() if extraction_status == "completed" else None,
+                notes=warning,
+                error_message=warning if extraction_status == "failed" else None,
                 uploaded_by=current_username(request),
             )
             db.add(contract_file)
+            db.flush()
             record_auth_event(
                 db,
                 "contract_uploaded",
@@ -1798,6 +2213,8 @@ async def import_contract(
                 request=request,
                 notes=f"Aditivo enviado: {original_filename}. Contrato base #{parent_contract.id}.",
             )
+            record_audit_log(db, request, "document_uploaded", entity_type="contract_file", entity_id=contract_file.id, details=f"Aditivo: {original_filename}")
+            record_audit_log(db, request, "contract_additive_created", entity_type="contract_additive", entity_id=additive.id, details=additive.additive_number)
             db.commit()
             db.refresh(additive)
 
@@ -1892,6 +2309,10 @@ async def import_contract(
             extracted_text=raw_text,
             extraction_status=extraction_status,
             extraction_method=extraction_method,
+            processing_status="processed" if extraction_status == "completed" else "error",
+            processed_at=datetime.utcnow() if extraction_status == "completed" else None,
+            notes=warning,
+            error_message=warning if extraction_status == "failed" else None,
             uploaded_by=current_username(request),
         )
         db.add(contract_file)
@@ -1918,6 +2339,8 @@ async def import_contract(
             request=request,
             notes=f"Análise gerada para contrato #{contract.id}.",
         )
+        record_audit_log(db, request, "contract_created", entity_type="contract", entity_id=contract.id, details=contract.contract_name)
+        record_audit_log(db, request, "document_uploaded", entity_type="contract_file", entity_id=contract_file.id, details=original_filename)
         db.commit()
         db.refresh(contract)
 
@@ -1953,6 +2376,395 @@ async def import_contract(
         )
     finally:
         db.close()
+
+
+@app.get("/operators", response_class=HTMLResponse)
+def operators_page(request: Request):
+    if redirect := require_login(request):
+        return redirect
+
+    db = SessionLocal()
+    try:
+        operators = db.query(Operator).order_by(Operator.name.asc()).all()
+        contract_counts = {
+            operator_id: count
+            for operator_id, count in db.query(Contract.operator_id, __import__("sqlalchemy").func.count(Contract.id))
+            .group_by(Contract.operator_id)
+            .all()
+            if operator_id
+        }
+        return templates.TemplateResponse(
+            request,
+            "operators.html",
+            {
+                "title": "Operadoras",
+                "active_page": "operators",
+                "user": request.session.get("user"),
+                "operators": operators,
+                "contract_counts": contract_counts,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/operators/new", response_class=HTMLResponse)
+def operator_new_page(request: Request):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite cadastrar operadoras."):
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "operator_form.html",
+        {"title": "Nova operadora", "active_page": "operators", "user": request.session.get("user"), "operator": None, "error": None},
+    )
+
+
+@app.post("/operators/new", response_class=HTMLResponse)
+def operator_new_submit(
+    request: Request,
+    name: str = Form(...),
+    tax_id: str = Form(default=""),
+    contact_name: str = Form(default=""),
+    contact_email: str = Form(default=""),
+    contact_phone: str = Form(default=""),
+    notes: str = Form(default=""),
+    is_active: str | None = Form(default=None),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite cadastrar operadoras."):
+        return redirect
+    db = SessionLocal()
+    try:
+        operator = Operator(
+            name=name.strip(),
+            tax_id=tax_id.strip() or None,
+            contact_name=contact_name.strip() or None,
+            contact_email=contact_email.strip() or None,
+            contact_phone=contact_phone.strip() or None,
+            notes=notes.strip() or None,
+            is_active=bool(is_active),
+        )
+        db.add(operator)
+        db.flush()
+        record_audit_log(db, request, "operator_created", entity_type="operator", entity_id=operator.id, details=operator.name)
+        db.commit()
+        return RedirectResponse("/operators", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "operator_form.html",
+            {"title": "Nova operadora", "active_page": "operators", "user": request.session.get("user"), "operator": None, "error": "Não foi possível salvar a operadora."},
+            status_code=400,
+        )
+    finally:
+        db.close()
+
+
+@app.get("/operators/{operator_id:int}/edit", response_class=HTMLResponse)
+def operator_edit_page(request: Request, operator_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite editar operadoras."):
+        return redirect
+    db = SessionLocal()
+    try:
+        operator = db.query(Operator).filter(Operator.id == operator_id).first()
+        if not operator:
+            return RedirectResponse("/operators", status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "operator_form.html",
+            {"title": "Editar operadora", "active_page": "operators", "user": request.session.get("user"), "operator": operator, "error": None},
+        )
+    finally:
+        db.close()
+
+
+@app.post("/operators/{operator_id:int}/edit", response_class=HTMLResponse)
+def operator_edit_submit(
+    request: Request,
+    operator_id: int,
+    name: str = Form(...),
+    tax_id: str = Form(default=""),
+    contact_name: str = Form(default=""),
+    contact_email: str = Form(default=""),
+    contact_phone: str = Form(default=""),
+    notes: str = Form(default=""),
+    is_active: str | None = Form(default=None),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES, "Seu perfil não permite editar operadoras."):
+        return redirect
+    db = SessionLocal()
+    try:
+        operator = db.query(Operator).filter(Operator.id == operator_id).first()
+        if not operator:
+            return RedirectResponse("/operators", status_code=303)
+        operator.name = name.strip()
+        operator.tax_id = tax_id.strip() or None
+        operator.contact_name = contact_name.strip() or None
+        operator.contact_email = contact_email.strip() or None
+        operator.contact_phone = contact_phone.strip() or None
+        operator.notes = notes.strip() or None
+        operator.is_active = bool(is_active)
+        record_audit_log(db, request, "operator_updated", entity_type="operator", entity_id=operator.id, details=operator.name)
+        db.commit()
+        return RedirectResponse("/operators", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível atualizar a operadora."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.get("/contract-terms", response_class=HTMLResponse)
+def contract_terms_page(request: Request):
+    if redirect := require_login(request):
+        return redirect
+    db = SessionLocal()
+    try:
+        return templates.TemplateResponse(
+            request,
+            "contract_terms.html",
+            {
+                "title": "Condições Contratuais",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contracts": db.query(Contract).filter(Contract.status != "inactive").order_by(Contract.contract_name.asc()).all(),
+                "terms": db.query(ContractTerm).join(Contract).order_by(ContractTerm.created_at.desc()).all(),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/contract-terms")
+def contract_term_create(
+    request: Request,
+    contract_id: int = Form(...),
+    category: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(default=""),
+    reference_value: str = Form(default=""),
+    deadline_days: str = Form(default=""),
+    version: int = Form(default=1),
+    valid_from: str = Form(default=""),
+    valid_until: str = Form(default=""),
+    is_current: str | None = Form(default=None),
+    source_type: str = Form(default="manual"),
+    rule_text: str = Form(default=""),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | FINANCIAL_PROFILES, "Seu perfil não permite registrar condições contratuais."):
+        return redirect
+    db = SessionLocal()
+    try:
+        amount = reference_value.replace(".", "").replace(",", ".").strip()
+        term = ContractTerm(
+            contract_id=contract_id,
+            category=category.strip(),
+            title=title.strip(),
+            description=description.strip() or None,
+            reference_value=float(amount) if amount else None,
+            deadline_days=parse_optional_int(deadline_days),
+            version=version,
+            valid_from=parse_optional_date(valid_from),
+            valid_until=parse_optional_date(valid_until),
+            is_current=bool(is_current),
+            source_type=source_type.strip() or "manual",
+            rule_text=rule_text.strip() or None,
+        )
+        db.add(term)
+        db.flush()
+        record_audit_log(db, request, "contract_term_created", entity_type="contract_term", entity_id=term.id, details=term.title)
+        db.commit()
+        return RedirectResponse("/contract-terms", status_code=303)
+    except (SQLAlchemyError, ValueError):
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível salvar a condição contratual."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.post("/contract-terms/{term_id:int}/edit")
+def contract_term_edit(
+    request: Request,
+    term_id: int,
+    title: str = Form(...),
+    description: str = Form(default=""),
+    reference_value: str = Form(default=""),
+    deadline_days: str = Form(default=""),
+    version: int = Form(default=1),
+    valid_from: str = Form(default=""),
+    valid_until: str = Form(default=""),
+    is_current: str | None = Form(default=None),
+    status: str = Form(default="active"),
+    rule_text: str = Form(default=""),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | FINANCIAL_PROFILES, "Seu perfil não permite editar condições contratuais."):
+        return redirect
+    db = SessionLocal()
+    try:
+        term = db.query(ContractTerm).filter(ContractTerm.id == term_id).first()
+        if not term:
+            return RedirectResponse("/contract-terms", status_code=303)
+        amount = reference_value.replace(".", "").replace(",", ".").strip()
+        term.title = title.strip()
+        term.description = description.strip() or None
+        term.reference_value = float(amount) if amount else None
+        term.deadline_days = parse_optional_int(deadline_days)
+        term.version = version
+        term.valid_from = parse_optional_date(valid_from)
+        term.valid_until = parse_optional_date(valid_until)
+        term.is_current = bool(is_current)
+        term.status = status.strip() or "active"
+        term.rule_text = rule_text.strip() or None
+        record_audit_log(db, request, "contract_term_updated", entity_type="contract_term", entity_id=term.id, details=term.title)
+        db.commit()
+        return RedirectResponse("/contract-terms", status_code=303)
+    except (SQLAlchemyError, ValueError):
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível atualizar a condição contratual."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.get("/adjustments", response_class=HTMLResponse)
+def adjustments_page(request: Request):
+    if redirect := require_profiles(request, ADDITIVE_VIEW_PROFILES | FINANCIAL_PROFILES, "Seu perfil não permite acessar reajustes e aditivos."):
+        return redirect
+    db = SessionLocal()
+    try:
+        return templates.TemplateResponse(
+            request,
+            "adjustments.html",
+            {
+                "title": "Reajustes e Aditivos",
+                "active_page": "adjustments",
+                "user": request.session.get("user"),
+                "contracts": db.query(Contract).filter(Contract.status != "inactive").order_by(Contract.contract_name.asc()).all(),
+                "adjustments": db.query(ContractAdjustment).join(Contract).order_by(ContractAdjustment.created_at.desc()).all(),
+                "additives": db.query(ContractAdditive).join(Contract).order_by(ContractAdditive.created_at.desc()).all(),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/adjustments")
+def adjustment_create(
+    request: Request,
+    contract_id: int = Form(...),
+    reference_year: int = Form(...),
+    adjustment_date: str = Form(default=""),
+    adjustment_index: str = Form(default=""),
+    applied_percentage: str = Form(default=""),
+    requested_percentage: str = Form(default=""),
+    status: str = Form(default="pending"),
+    justification: str = Form(default=""),
+    notes: str = Form(default=""),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | FINANCIAL_PROFILES, "Seu perfil não permite registrar reajustes."):
+        return redirect
+    db = SessionLocal()
+    try:
+        def pct(value: str):
+            value = value.replace(",", ".").strip()
+            return float(value) if value else None
+
+        adjustment = ContractAdjustment(
+            contract_id=contract_id,
+            reference_year=reference_year,
+            adjustment_date=parse_optional_date(adjustment_date),
+            adjustment_index=adjustment_index.strip() or None,
+            applied_percentage=pct(applied_percentage),
+            requested_percentage=pct(requested_percentage),
+            status=status.strip() or "pending",
+            justification=justification.strip() or None,
+            notes=notes.strip() or None,
+        )
+        db.add(adjustment)
+        db.flush()
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if contract:
+            contract.reajust_index = adjustment.adjustment_index or contract.reajust_index
+            contract.reajust_percentage = adjustment.applied_percentage or contract.reajust_percentage
+            contract.base_date = adjustment.adjustment_date or contract.base_date
+        record_audit_log(db, request, "contract_adjustment_created", entity_type="contract_adjustment", entity_id=adjustment.id, details=adjustment.adjustment_index)
+        db.commit()
+        return RedirectResponse("/adjustments", status_code=303)
+    except (SQLAlchemyError, ValueError):
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível salvar o reajuste."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.post("/adjustments/{adjustment_id:int}/edit")
+def adjustment_edit(
+    request: Request,
+    adjustment_id: int,
+    adjustment_date: str = Form(default=""),
+    adjustment_index: str = Form(default=""),
+    applied_percentage: str = Form(default=""),
+    requested_percentage: str = Form(default=""),
+    status: str = Form(default="pending"),
+    justification: str = Form(default=""),
+    notes: str = Form(default=""),
+):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | FINANCIAL_PROFILES, "Seu perfil não permite editar reajustes."):
+        return redirect
+    db = SessionLocal()
+    try:
+        def pct(value: str):
+            value = value.replace(",", ".").strip()
+            return float(value) if value else None
+
+        adjustment = db.query(ContractAdjustment).filter(ContractAdjustment.id == adjustment_id).first()
+        if not adjustment:
+            return RedirectResponse("/adjustments", status_code=303)
+        adjustment.adjustment_date = parse_optional_date(adjustment_date)
+        adjustment.adjustment_index = adjustment_index.strip() or None
+        adjustment.applied_percentage = pct(applied_percentage)
+        adjustment.requested_percentage = pct(requested_percentage)
+        adjustment.status = status.strip() or "pending"
+        adjustment.justification = justification.strip() or None
+        adjustment.notes = notes.strip() or None
+        record_audit_log(db, request, "contract_adjustment_updated", entity_type="contract_adjustment", entity_id=adjustment.id, details=adjustment.adjustment_index)
+        db.commit()
+        return RedirectResponse("/adjustments", status_code=303)
+    except (SQLAlchemyError, ValueError):
+        db.rollback()
+        return JSONResponse({"error": "Não foi possível atualizar o reajuste."}, status_code=400)
+    finally:
+        db.close()
+
+
+@app.get("/audit-logs", response_class=HTMLResponse)
+def audit_logs_page(request: Request):
+    if redirect := require_profiles(request, AUDIT_PROFILES, "Seu perfil não permite acessar auditoria."):
+        return redirect
+    db = SessionLocal()
+    try:
+        return templates.TemplateResponse(
+            request,
+            "audit_logs.html",
+            {
+                "title": "Auditoria",
+                "active_page": "audit_logs",
+                "user": request.session.get("user"),
+                "logs": db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(300).all(),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    if redirect := require_profiles(request, ADMIN_PROFILES, "Seu perfil não permite acessar configurações."):
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"title": "Configurações", "active_page": "settings", "user": request.session.get("user")},
+    )
 
 
 @app.get("/aditivos", response_class=HTMLResponse)
@@ -2188,6 +3000,10 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             extracted_text=raw_text,
             extraction_status=extraction_status,
             extraction_method=extraction_method,
+            processing_status="processed" if extraction_status == "completed" else "error",
+            processed_at=datetime.utcnow() if extraction_status == "completed" else None,
+            notes=warning,
+            error_message=warning if extraction_status == "failed" else None,
             uploaded_by=current_username(request),
         )
         db.add(contract_file)
@@ -2214,6 +3030,8 @@ async def analises_ia_upload(request: Request, file: UploadFile = File(...)):
             request=request,
             notes=f"Análise IA gerada para contrato #{contract.id}.",
         )
+        record_audit_log(db, request, "contract_created", entity_type="contract", entity_id=contract.id, details=contract.contract_name)
+        record_audit_log(db, request, "document_uploaded", entity_type="contract_file", entity_id=contract_file.id, details=original_filename)
         db.commit()
 
         return JSONResponse(
@@ -2305,6 +3123,11 @@ def comparacoes(request: Request):
         )
     finally:
         db.close()
+
+
+@app.get("/comparisons")
+def comparisons_alias(request: Request):
+    return RedirectResponse("/comparacoes", status_code=303)
 
 
 @app.post("/comparacoes")

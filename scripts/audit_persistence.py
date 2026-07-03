@@ -205,7 +205,8 @@ def main() -> None:
             assert created_user.full_name == "Usuário Persistente Editado"
             assert created_user.is_active is False
             assert db.query(AccessProfile).filter(AccessProfile.id == profile_id, AccessProfile.is_active.is_(False)).count() == 1
-            assert db.query(Contract).filter(Contract.id.in_(contract_ids)).count() == 2
+            assert db.query(Contract).filter(Contract.id.in_(contract_ids)).count() == 3
+            assert db.query(Contract).filter(Contract.id == contract_ids[1], Contract.status == "inactive").count() == 1
             assert db.query(Contract).filter(Contract.id == contract_ids[0], Contract.contract_number == f"{marker}-EDIT").count() == 1
             assert db.query(Contract).filter(Contract.id == contract_ids[0], Contract.responsible_name == "Responsável Persistente").count() == 1
             assert db.query(ContractEvent).filter(ContractEvent.contract_id == contract_ids[0]).count() == 1

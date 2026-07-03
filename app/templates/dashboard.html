@@ -21,8 +21,10 @@
 <section class="metric-grid" aria-label="Indicadores principais">
     <article class="metric-card reveal"><span class="metric-icon green">C</span><div><p>Contratos analisados</p><strong>{{ metrics.total_contracts }}</strong><small>Persistidos no PostgreSQL</small></div></article>
     <article class="metric-card reveal"><span class="metric-icon red">!</span><div><p>Contratos com alto risco</p><strong>{{ metrics.expired + metrics.due_30 }}</strong><small>Vigência, prazo ou alerta crítico</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon orange">60</span><div><p>Vencendo em 60 dias</p><strong>{{ metrics.due_60 }}</strong><small>Planejar renovação e negociação</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon yellow">90</span><div><p>Vencendo em 90 dias</p><strong>{{ metrics.due_90 }}</strong><small>Monitoramento preventivo</small></div></article>
     <article class="metric-card reveal"><span class="metric-icon orange">$</span><div><p>Riscos financeiros</p><strong>{{ metrics.no_adjustment }}</strong><small>Reajuste, pagamento, glosa, OPME e materiais</small></div></article>
-    <article class="metric-card reveal"><span class="metric-icon purple">J</span><div><p>Riscos jurídicos</p><strong>{{ metrics.expired }}</strong><small>Vigência, rescisão e cláusulas críticas</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon purple">D</span><div><p>Documentação pendente</p><strong>{{ metrics.pending_documents }}</strong><small>Contratos sem anexo registrado</small></div></article>
     <article class="metric-card reveal"><span class="metric-icon yellow">P</span><div><p>Pendências críticas</p><strong>{{ attention_rows|length }}</strong><small>Itens que exigem revisão</small></div></article>
     <article class="metric-card reveal"><span class="metric-icon green">S</span><div><p>Proteção média</p><strong>{{ metrics.average_score }}/100</strong><small>Quanto maior, mais favorável ao hospital</small></div></article>
 </section>

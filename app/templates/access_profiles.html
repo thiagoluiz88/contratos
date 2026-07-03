@@ -22,7 +22,7 @@
                     <td><span class="status-pill {{ 'active' if profile.is_active else 'suspended' }}">{{ "Ativo" if profile.is_active else "Inativo" }}</span></td>
                     <td class="admin-actions">
                         <a class="secondary-action" href="/access-profiles/{{ profile.id }}/edit">Editar</a>
-                        {% if profile.is_active and profile.name != "Administrator" %}
+                        {% if profile.is_active and profile.name != "Administrador" %}
                         <form method="post" action="/access-profiles/{{ profile.id }}/deactivate">
                             <button class="secondary-action danger-action" type="submit">Desativar</button>
                         </form>

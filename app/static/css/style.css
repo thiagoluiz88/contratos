@@ -15,6 +15,20 @@
     --shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
 }
 
+.text-preview {
+    max-height: 360px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #1f2937;
+    font: 13px/1.5 "Consolas", "Courier New", monospace;
+}
+
 * {
     box-sizing: border-box;
 }

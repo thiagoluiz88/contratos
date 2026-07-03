@@ -30,6 +30,7 @@ class Operator(Base):
     contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -65,10 +66,13 @@ class Contract(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     operator_id: Mapped[int | None] = mapped_column(ForeignKey("operators.id", ondelete="SET NULL"), nullable=True, index=True)
+    parent_contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True)
     import_batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batches.id", ondelete="SET NULL"), nullable=True, index=True)
     contract_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    contract_type: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     operator_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contract_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="active", index=True)
     responsible_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_info: Mapped[str | None] = mapped_column(String(255), nullable=True)
     adjustment_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -97,7 +101,10 @@ class Contract(Base):
     reajust_clause_exists: Mapped[bool] = mapped_column(Boolean, default=False)
     reajust_frequency: Mapped[str | None] = mapped_column(String(100), nullable=True)
     reajust_index: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reajust_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    base_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     reajust_clause_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observations: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     medical_fee_table: Mapped[str | None] = mapped_column(String(255), nullable=True)
     medical_fee_table_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -125,7 +132,10 @@ class Contract(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     operator: Mapped[Operator | None] = relationship(back_populates="contracts")
+    parent_contract: Mapped["Contract | None"] = relationship(remote_side=[id], back_populates="child_contracts")
+    child_contracts: Mapped[list["Contract"]] = relationship(back_populates="parent_contract")
     files: Mapped[list["ContractFile"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
+    extractions: Mapped[list["ContractExtraction"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     additives: Mapped[list["ContractAdditive"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     analyses: Mapped[list["AIAnalysis"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     clauses: Mapped[list["ContractClause"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
@@ -133,6 +143,7 @@ class Contract(Base):
     adjustments: Mapped[list["ContractAdjustment"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     remuneration_tables: Mapped[list["RemunerationTable"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
     materials_medicines_rules: Mapped[list["MaterialsMedicinesRule"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
+    terms: Mapped[list["ContractTerm"]] = relationship(back_populates="contract", cascade="all, delete-orphan")
 
 
 class ContractAdjustment(Base):
@@ -144,14 +155,59 @@ class ContractAdjustment(Base):
     adjustment_index: Mapped[str | None] = mapped_column(String(100), nullable=True)
     applied_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
     requested_percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    adjustment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     request_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     approval_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="pending", index=True)
+    justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    document_file_id: Mapped[int | None] = mapped_column(ForeignKey("contract_files.id", ondelete="SET NULL"), nullable=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     contract: Mapped[Contract] = relationship(back_populates="adjustments")
+    document_file: Mapped["ContractFile | None"] = relationship()
+
+
+class ContractTerm(Base):
+    __tablename__ = "contract_terms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    deadline_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rule_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    source_document_id: Mapped[int | None] = mapped_column(ForeignKey("contract_files.id", ondelete="SET NULL"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(50), default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contract: Mapped[Contract] = relationship(back_populates="terms")
+    source_document: Mapped["ContractFile | None"] = relationship()
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    entity_type: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
 class RemunerationTable(Base):
@@ -264,6 +320,7 @@ class ContractFile(Base):
     contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), index=True)
     import_batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batches.id", ondelete="SET NULL"), nullable=True, index=True)
     file_type: Mapped[str] = mapped_column(String(50), default="contract")
+    document_type: Mapped[str] = mapped_column(String(50), default="contrato", index=True)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_filepath: Mapped[str] = mapped_column(String(500), nullable=False)
     mime_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -272,10 +329,45 @@ class ContractFile(Base):
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     extraction_status: Mapped[str] = mapped_column(String(50), default="pending", index=True)
     extraction_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(50), default="pendente", index=True)
     uploaded_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     contract: Mapped[Contract] = relationship(back_populates="files")
+    extractions: Mapped[list["ContractExtraction"]] = relationship(back_populates="contract_file", cascade="all, delete-orphan")
+
+
+class ContractExtraction(Base):
+    __tablename__ = "contract_extractions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_file_id: Mapped[int] = mapped_column(ForeignKey("contract_files.id", ondelete="CASCADE"), nullable=False, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    extraction_status: Mapped[str] = mapped_column(String(50), default="pendente", nullable=False, index=True)
+    extracted_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_text_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extraction_method: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    extraction_warnings: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    character_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extraction_source: Mapped[str] = mapped_column(String(50), default="manual", nullable=False, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_status: Mapped[str] = mapped_column(String(50), default="pendente", nullable=False, index=True)
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contract_file: Mapped[ContractFile] = relationship(back_populates="extractions")
+    contract: Mapped[Contract] = relationship(back_populates="extractions")
 
 
 class ContractAdditive(Base):

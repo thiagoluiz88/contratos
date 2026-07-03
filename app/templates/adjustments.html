@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Reajustes e Aditivos</h1>
+        <p>Histórico de reajustes, índices aplicados, justificativas e aditivos vinculados aos contratos.</p>
+    </div>
+</header>
+
+{% if has_profile(user, CONTRACT_WRITE_PROFILES) or has_profile(user, FINANCIAL_PROFILES) %}
+<section class="panel">
+    <form method="post" class="form-grid two-cols">
+        <label><span>Contrato</span><select name="contract_id" required>{% for contract in contracts %}<option value="{{ contract.id }}">{{ contract.contract_name }} - {{ contract.operator_name or "Operadora não informada" }}</option>{% endfor %}</select></label>
+        <label><span>Ano de referência</span><input type="number" name="reference_year" value="{{ 2026 }}" required></label>
+        <label><span>Data do reajuste</span><input type="date" name="adjustment_date"></label>
+        <label><span>Índice aplicado</span><input name="adjustment_index" placeholder="IPCA, IGP-M, INPC..."></label>
+        <label><span>Percentual aplicado</span><input name="applied_percentage" inputmode="decimal"></label>
+        <label><span>Percentual solicitado</span><input name="requested_percentage" inputmode="decimal"></label>
+        <label><span>Status</span><select name="status"><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="rejected">Recusado</option><option value="negotiating">Em negociação</option></select></label>
+        <label class="full"><span>Justificativa</span><textarea name="justification"></textarea></label>
+        <label class="full"><span>Observações</span><textarea name="notes"></textarea></label>
+        <div class="full inline-actions"><button class="btn btn-primary" type="submit">Registrar reajuste</button></div>
+    </form>
+</section>
+{% endif %}
+
+<section class="dashboard-grid second-row">
+    <article class="panel">
+        <div class="panel-header"><h2>Histórico de reajustes</h2></div>
+        <div class="table-wrap">
+            <table class="contracts-table">
+                <thead><tr><th>Contrato</th><th>Ano</th><th>Data</th><th>Índice</th><th>Aplicado</th><th>Status</th><th>Justificativa</th></tr></thead>
+                <tbody>
+                    {% for adjustment in adjustments %}
+                    <tr><td>{{ adjustment.contract.contract_name }}</td><td>{{ adjustment.reference_year }}</td><td>{{ adjustment.adjustment_date or "-" }}</td><td>{{ adjustment.adjustment_index or "-" }}</td><td>{{ adjustment.applied_percentage or "-" }}</td><td>{{ adjustment.status }}</td><td>{{ adjustment.justification or adjustment.notes or "-" }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="7"><div class="empty-state inline">Nenhum reajuste registrado.</div></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+    <article class="panel">
+        <div class="panel-header"><h2>Aditivos</h2></div>
+        <div class="timeline-list">
+            {% for additive in additives %}
+            <article class="timeline-item"><div><strong>{{ additive.additive_number }}</strong><p>{{ additive.contract.contract_name }} - {{ additive.object_summary or additive.additive_type or "Aditivo" }}</p><p class="muted">{{ additive.signature_date or additive.created_at.date() }} · {{ additive.status }}</p></div></article>
+            {% else %}
+            <div class="empty-state inline">Nenhum aditivo registrado.</div>
+            {% endfor %}
+        </div>
+    </article>
+</section>
+{% endblock %}
