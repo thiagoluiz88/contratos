@@ -274,3 +274,20 @@ Essa integração deve ser feita de forma controlada, documentada e segura. No m
 - Separar dado extraído, dado validado e dado oficial.
 - Preservar histórico de contratos, aditivos e tabelas.
 - Preparar integrações futuras sem implementá-las antes da necessidade.
+## Modulo 2 - Gestao de tabelas contratuais
+
+O sistema passa a contar com uma visao versionada de `contract_terms`, permitindo consultar a tabela vigente de cada contrato, historico de versoes, origem documental e comparacao entre versoes.
+
+Principais rotas:
+
+- `/contracts/{id}/terms`
+- `/contracts/{id}/terms/compare`
+- `/contracts/{id}/terms/compare/export`
+
+A comparacao identifica itens sem alteracao, novos, removidos, aumentos, reducoes e alteracoes de descricao, unidade ou vigencia. A etapa futura sera comparar contra tabela de referencia e calcular defasagem comercial.
+
+## Modulo 2 - Simulacao e referencia
+
+O sistema passa a permitir simulacao de uma nova tabela contratual antes da aplicacao oficial. A simulacao e separada de `contract_terms`, pode ser revisada, comparada e aprovada, e somente depois de acao humana pode virar uma nova versao oficial.
+
+Tambem foi criada uma base para tabelas de referencia manuais. O sistema nao cria CBHPM nem valores de mercado automaticamente; a referencia depende de dados reais cadastrados pelo usuario. A proxima etapa sera usar essas referencias para BI Comercial e calculo de defasagem por operadora.

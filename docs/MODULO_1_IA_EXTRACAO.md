@@ -196,3 +196,20 @@ Pontos preparados:
 - `apply_extracted_terms_to_contract_terms()`
 
 Quando IA/OCR for implementada, ela deve preencher `extracted_json` com dados preliminares e manter a validacao humana como etapa obrigatoria antes de qualquer aplicacao definitiva no cadastro.
+## Analise interpretativa local
+
+O modulo agora inclui a primeira versao do motor interpretativo local em `app/services/contract_ai_analysis_service.py`.
+
+- A rota `POST /documents/{id}/analyze` gera candidatos a partir do `extracted_text`.
+- O metodo e deterministico (`local_rules`) e nao usa API externa.
+- O resultado e salvo em `contract_extractions.extracted_json` como candidatos com `value`, `confidence` e `evidence`.
+- A tela `/documents/{id}/validate` mostra candidatos e permite correcao humana.
+- A aprovacao continua manual e nao aplica dados automaticamente em `contracts` ou `contract_terms`.
+
+Detalhes operacionais estao em `docs/MODULO_1_ANALISE_INTERPRETATIVA.md`.
+
+## Aplicacao dos dados aprovados
+
+A aprovacao humana e separada da aplicacao no cadastro. Depois de `review_status=aprovado`, usuarios autorizados podem executar `POST /documents/{id}/apply` para gravar dados aprovados em operadoras, contratos, aditivos e `contract_terms`.
+
+Regras completas: `docs/MODULO_1_APLICACAO_DADOS_APROVADOS.md`.

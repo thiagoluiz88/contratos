@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>{{ simulation.simulation_name }}</h1>
+        <p>{{ contract.contract_name }} · base v{{ simulation.base_version or "-" }} para simulada v{{ simulation.simulated_version or "-" }}</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="secondary-action" href="/contracts/{{ contract.id }}/terms/simulations">Simulacoes</a>
+        <a class="secondary-action" href="/contracts/{{ contract.id }}/terms">Tabela oficial</a>
+    </div>
+</header>
+
+{% if simulation_message %}
+<section class="panel"><div class="empty-state inline">{{ simulation_message }}</div></section>
+{% endif %}
+
+<section class="stats-grid four-inline">
+    <article class="mini-card"><span>Status</span><strong>{{ simulation.simulation_status }}</strong></article>
+    <article class="mini-card"><span>Itens simulados</span><strong>{{ simulation.simulated_terms_json|length if simulation.simulated_terms_json else 0 }}</strong></article>
+    <article class="mini-card"><span>Itens novos</span><strong>{{ comparison.summary.counts.novo }}</strong></article>
+    <article class="mini-card"><span>Alteracoes de valor</span><strong>{{ comparison.summary.counts.aumento + comparison.summary.counts.reducao }}</strong></article>
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Controle da simulacao</h2><p>Aprovar libera a aplicacao. Aplicar cria uma nova versao oficial e preserva a anterior.</p></div></div>
+    <div class="inline-actions">
+        {% if has_profile(user, APPLY_APPROVED_EXTRACTION_PROFILES) and simulation.simulation_status not in ["aprovada", "aplicada", "cancelada"] %}
+        <form method="post" action="/contracts/{{ contract.id }}/terms/simulations/{{ simulation.id }}/approve"><button class="btn btn-primary" type="submit">Aprovar simulacao</button></form>
+        {% endif %}
+        {% if has_profile(user, APPLY_APPROVED_EXTRACTION_PROFILES) and simulation.simulation_status == "aprovada" %}
+        <form method="post" action="/contracts/{{ contract.id }}/terms/simulations/{{ simulation.id }}/apply"><button class="btn btn-primary" type="submit">Aplicar como nova versao oficial</button></form>
+        {% endif %}
+        {% if has_profile(user, APPLY_APPROVED_EXTRACTION_PROFILES) and simulation.simulation_status != "aplicada" %}
+        <form method="post" action="/contracts/{{ contract.id }}/terms/simulations/{{ simulation.id }}/cancel"><button class="btn btn-secondary" type="submit">Cancelar</button></form>
+        {% endif %}
+    </div>
+    {% if simulation.error_message %}<div class="candidate-warning-list"><div>{{ simulation.error_message }}</div></div>{% endif %}
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Resumo comparativo</h2></div></div>
+    <div class="stats-grid four-inline">
+        <article class="mini-card"><span>Sem alteracao</span><strong>{{ comparison.summary.counts.sem_alteracao }}</strong></article>
+        <article class="mini-card"><span>Novos</span><strong>{{ comparison.summary.counts.novo }}</strong></article>
+        <article class="mini-card"><span>Removidos</span><strong>{{ comparison.summary.counts.removido }}</strong></article>
+        <article class="mini-card"><span>Aumentos</span><strong>{{ comparison.summary.counts.aumento }}</strong></article>
+    </div>
+    <div class="empty-state inline">Impacto financeiro depende de volume assistencial e ainda nao foi calculado.</div>
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Diferencas simuladas</h2></div></div>
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead><tr><th>Categoria</th><th>Item</th><th>Unidade</th><th>Atual</th><th>Simulado</th><th>Dif. R$</th><th>Dif. %</th><th>Situacao</th></tr></thead>
+            <tbody>
+                {% for row in comparison.rows %}
+                <tr class="comparison-row {{ row.change_type }}">
+                    <td>{{ row.category }}</td>
+                    <td><strong>{{ row.item }}</strong></td>
+                    <td>{{ row.unit or "-" }}</td>
+                    <td>{{ row.old_value or "-" }}</td>
+                    <td>{{ row.new_value or "-" }}</td>
+                    <td>{{ row.difference_amount or "-" }}</td>
+                    <td>{{ row.difference_percent or "-" }}</td>
+                    <td><span class="status-pill pending">{{ row.change_type }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8"><div class="empty-state inline">Nenhuma diferenca calculada.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

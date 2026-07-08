@@ -178,6 +178,7 @@ class ContractTerm(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     reference_value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     deadline_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rule_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -186,12 +187,71 @@ class ContractTerm(Base):
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     source_document_id: Mapped[int | None] = mapped_column(ForeignKey("contract_files.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     contract: Mapped[Contract] = relationship(back_populates="terms")
     source_document: Mapped["ContractFile | None"] = relationship()
+
+
+class ContractTermSimulation(Base):
+    __tablename__ = "contract_term_simulations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_document_id: Mapped[int | None] = mapped_column(ForeignKey("contract_files.id", ondelete="SET NULL"), nullable=True, index=True)
+    source_extraction_id: Mapped[int | None] = mapped_column(ForeignKey("contract_extractions.id", ondelete="SET NULL"), nullable=True, index=True)
+    simulation_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_version: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    simulated_version: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    simulation_status: Mapped[str] = mapped_column(String(50), default="rascunho", nullable=False, index=True)
+    simulated_terms_json: Mapped[list | dict] = mapped_column(JSON, default=list, nullable=False)
+    comparison_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    applied_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    contract: Mapped[Contract] = relationship()
+    source_document: Mapped["ContractFile | None"] = relationship()
+    source_extraction: Mapped["ContractExtraction | None"] = relationship()
+
+
+class ReferenceTable(Base):
+    __tablename__ = "reference_tables"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    version: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="active", index=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    items: Mapped[list["ReferenceTableItem"]] = relationship(back_populates="reference_table", cascade="all, delete-orphan")
+
+
+class ReferenceTableItem(Base):
+    __tablename__ = "reference_table_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    reference_table_id: Mapped[int] = mapped_column(ForeignKey("reference_tables.id", ondelete="CASCADE"), nullable=False, index=True)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    item: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    reference_table: Mapped[ReferenceTable] = relationship(back_populates="items")
 
 
 class AuditLog(Base):
@@ -364,6 +424,11 @@ class ContractExtraction(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     review_status: Mapped[str] = mapped_column(String(50), default="pendente", nullable=False, index=True)
     review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    apply_status: Mapped[str] = mapped_column(String(50), default="pendente", nullable=False, index=True)
+    applied_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    apply_summary: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    apply_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     contract_file: Mapped[ContractFile] = relationship(back_populates="extractions")

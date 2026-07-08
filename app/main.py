@@ -4,7 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -36,8 +36,11 @@ from .models import (
     ContractExtraction,
     ContractFile,
     ContractTerm,
+    ContractTermSimulation,
     ImportBatch,
     Operator,
+    ReferenceTable,
+    ReferenceTableItem,
     User,
 )
 from .services.auth import (
@@ -50,6 +53,7 @@ from .services.auth import (
     DEFAULT_REGISTER_PROFILE,
     FINANCIAL_PROFILES,
     PROFILE_ADMIN,
+    PROFILE_EXECUTIVE,
     ensure_initial_admin,
     get_access_profile,
     has_profile,
@@ -60,6 +64,8 @@ from .services.auth import (
     validate_password_strength,
     verify_password,
 )
+
+APPLY_APPROVED_EXTRACTION_PROFILES = CONTRACT_WRITE_PROFILES | {PROFILE_EXECUTIVE}
 
 
 app = FastAPI(title="Contracts Intelligence")
@@ -104,6 +110,7 @@ templates.env.globals["ADDITIVE_VIEW_PROFILES"] = ADDITIVE_VIEW_PROFILES
 templates.env.globals["ANALYSIS_VIEW_PROFILES"] = ANALYSIS_VIEW_PROFILES
 templates.env.globals["ANALYSIS_WRITE_PROFILES"] = ANALYSIS_WRITE_PROFILES
 templates.env.globals["FINANCIAL_PROFILES"] = FINANCIAL_PROFILES
+templates.env.globals["APPLY_APPROVED_EXTRACTION_PROFILES"] = APPLY_APPROVED_EXTRACTION_PROFILES
 templates.env.globals["ENABLE_SELF_REGISTRATION"] = ENABLE_SELF_REGISTRATION
 SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".txt"}
 DEFAULT_OPERATOR_NAMES = []
@@ -336,6 +343,19 @@ def current_username(request: Request) -> str | None:
     return request.session.get("user", {}).get("username")
 
 
+def record_service_audit_events(db, request: Request, events) -> None:
+    for event in events:
+        record_audit_log(
+            db,
+            request,
+            event.action,
+            entity_type=event.entity_type,
+            entity_id=event.entity_id,
+            success=event.success,
+            details=event.details,
+        )
+
+
 def record_audit_log(
     db,
     request: Request,
@@ -399,27 +419,46 @@ def latest_extraction_for_file(db, contract_file_id: int) -> ContractExtraction 
 
 
 def extraction_payload_from_form(form) -> dict:
+    def reviewed_candidate(name: str) -> dict:
+        value = str(form.get(name, "")).strip() or None
+        return {"value": value, "confidence": 1.0 if value else 0, "evidence": None, "reviewed": True}
+
+    def reviewed_clause(name: str, category: str) -> list[dict]:
+        value = str(form.get(name, "")).strip()
+        if not value:
+            return []
+        return [{"categoria": category, "value": value, "confidence": 1.0, "evidence": None, "reviewed": True}]
+
     return {
         "raw_text_available": None,
-        "candidate_sections": [],
-        "pending_ai_analysis": True,
+        "metadata": {
+            "analysis_version": "1.0",
+            "analysis_method": "human_review",
+            "generated_at": datetime.utcnow().isoformat(timespec="seconds"),
+            "requires_human_validation": False,
+            "human_reviewed": True,
+        },
         "contrato": {
-            "operadora": str(form.get("contrato_operadora", "")).strip() or None,
-            "numero_contrato": str(form.get("contrato_numero", "")).strip() or None,
-            "tipo_contrato": str(form.get("contrato_tipo", "")).strip() or None,
-            "data_inicio": str(form.get("contrato_data_inicio", "")).strip() or None,
-            "data_fim": str(form.get("contrato_data_fim", "")).strip() or None,
-            "data_base_reajuste": str(form.get("contrato_data_base", "")).strip() or None,
-            "indice_reajuste": str(form.get("contrato_indice", "")).strip() or None,
-            "percentual_reajuste": str(form.get("contrato_percentual", "")).strip() or None,
+            "operadora": reviewed_candidate("contrato_operadora"),
+            "razao_social": reviewed_candidate("contrato_razao_social"),
+            "cnpj": reviewed_candidate("contrato_cnpj"),
+            "registro_ans": reviewed_candidate("contrato_registro_ans"),
+            "numero_contrato": reviewed_candidate("contrato_numero"),
+            "tipo_contrato": reviewed_candidate("contrato_tipo"),
+            "data_assinatura": reviewed_candidate("contrato_data_assinatura"),
+            "data_inicio": reviewed_candidate("contrato_data_inicio"),
+            "data_fim": reviewed_candidate("contrato_data_fim"),
+            "data_base_reajuste": reviewed_candidate("contrato_data_base"),
+            "indice_reajuste": reviewed_candidate("contrato_indice"),
+            "percentual_reajuste": reviewed_candidate("contrato_percentual"),
         },
         "clausulas_criticas": {
-            "prazo_faturamento": str(form.get("clausula_prazo_faturamento", "")).strip() or None,
-            "prazo_recurso_glosa": str(form.get("clausula_prazo_recurso_glosa", "")).strip() or None,
-            "regras_glosa": str(form.get("clausula_regras_glosa", "")).strip() or None,
-            "regras_autorizacao": str(form.get("clausula_regras_autorizacao", "")).strip() or None,
-            "multas": str(form.get("clausula_multas", "")).strip() or None,
-            "auditoria": str(form.get("clausula_auditoria", "")).strip() or None,
+            "prazo_faturamento": reviewed_clause("clausula_prazo_faturamento", "prazo_faturamento"),
+            "prazo_recurso_glosa": reviewed_clause("clausula_prazo_recurso_glosa", "prazo_recurso_glosa"),
+            "regras_glosa": reviewed_clause("clausula_regras_glosa", "regras_glosa"),
+            "regras_autorizacao": reviewed_clause("clausula_regras_autorizacao", "regras_autorizacao"),
+            "multas": reviewed_clause("clausula_multas", "multas"),
+            "auditoria": reviewed_clause("clausula_auditoria", "auditoria"),
         },
         "condicoes_contratuais": [
             {
@@ -430,9 +469,48 @@ def extraction_payload_from_form(form) -> dict:
                 "unidade": str(form.get("condicao_unidade", "")).strip() or None,
                 "vigencia_inicio": str(form.get("condicao_vigencia_inicio", "")).strip() or None,
                 "vigencia_fim": str(form.get("condicao_vigencia_fim", "")).strip() or None,
+                "confidence": 1.0 if str(form.get("condicao_valor", "")).strip() else 0,
+                "evidence": None,
+                "reviewed": True,
             }
         ],
+        "warnings": [],
     }
+
+
+def candidate_value(value):
+    if isinstance(value, dict) and "value" in value:
+        return value.get("value")
+    return value
+
+
+def candidate_confidence(value) -> float:
+    if isinstance(value, dict):
+        try:
+            return float(value.get("confidence") or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def flatten_contract_candidates(payload: dict | None) -> dict:
+    return {key: candidate_value(value) for key, value in extraction_section(payload, "contrato").items()}
+
+
+def clause_value(value) -> str | None:
+    if isinstance(value, list):
+        chunks = []
+        for item in value:
+            if isinstance(item, dict):
+                chunks.append(item.get("value") or item.get("evidence") or "")
+            elif item:
+                chunks.append(str(item))
+        return "\n".join(chunk for chunk in chunks if chunk).strip() or None
+    return candidate_value(value)
+
+
+def flatten_clause_candidates(payload: dict | None) -> dict:
+    return {key: clause_value(value) for key, value in extraction_section(payload, "clausulas_criticas").items()}
 
 
 def extraction_section(payload: dict | None, section: str) -> dict:
@@ -1848,7 +1926,7 @@ async def document_upload(
 
 
 @app.get("/documents/{document_id:int}", response_class=HTMLResponse)
-def document_detail(request: Request, document_id: int):
+def document_detail(request: Request, document_id: int, apply_message: str | None = None):
     if redirect := require_login(request):
         return redirect
     db = SessionLocal()
@@ -1865,6 +1943,7 @@ def document_detail(request: Request, document_id: int):
                 "user": request.session.get("user"),
                 "document": document,
                 "extraction": latest_extraction_for_file(db, document.id),
+                "apply_message": apply_message,
             },
         )
     finally:
@@ -1888,8 +1967,132 @@ def document_download(request: Request, document_id: int):
         db.close()
 
 
+@app.post("/documents/{document_id:int}/analyze")
+def document_analyze(request: Request, document_id: int):
+    if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil nÃ£o permite gerar candidatos."):
+        return redirect
+
+    from .services.contract_ai_analysis_service import (
+        STATUS_ANALYZING,
+        STATUS_AWAITING_VALIDATION,
+        STATUS_CANDIDATES_GENERATED,
+        STATUS_ERROR,
+        analyze_extracted_contract_text,
+    )
+
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction:
+            extraction = ContractExtraction(
+                contract_file_id=document.id,
+                contract_id=document.contract_id,
+                extraction_status=STATUS_AWAITING_VALIDATION,
+                extracted_json={},
+                extraction_source="manual",
+                created_by=current_username(request),
+                review_status="pendente",
+            )
+            db.add(extraction)
+            db.flush()
+        if not (extraction.extracted_text or "").strip():
+            extraction.extraction_status = STATUS_AWAITING_VALIDATION
+            document.processing_status = STATUS_AWAITING_VALIDATION
+            record_audit_log(
+                db,
+                request,
+                "interpretive_analysis_no_text",
+                entity_type="contract_extraction",
+                entity_id=extraction.id,
+                success=False,
+                details=f"Documento #{document.id} sem texto extraido disponivel.",
+            )
+            db.commit()
+            return RedirectResponse(f"/documents/{document.id}/validate?analysis_message=sem_texto", status_code=303)
+
+        extraction.extraction_status = STATUS_ANALYZING
+        document.processing_status = STATUS_ANALYZING
+        record_audit_log(
+            db,
+            request,
+            "interpretive_analysis_started",
+            entity_type="contract_extraction",
+            entity_id=extraction.id,
+            details=f"Documento #{document.id}; {extraction.character_count} caracteres.",
+        )
+        db.commit()
+        extraction_id = extraction.id
+        document_id_for_redirect = document.id
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "NÃ£o foi possÃ­vel iniciar a anÃ¡lise interpretativa."}, status_code=500)
+    finally:
+        db.close()
+
+    try:
+        analyzed = analyze_extracted_contract_text(extraction_id, user_id=current_username(request))
+    except Exception:
+        db = SessionLocal()
+        try:
+            document = db.query(ContractFile).filter(ContractFile.id == document_id_for_redirect).first()
+            extraction = db.query(ContractExtraction).filter(ContractExtraction.id == extraction_id).first()
+            if document:
+                document.processing_status = STATUS_ERROR
+                document.error_message = "Falha ao gerar candidatos interpretativos."
+            if extraction:
+                extraction.extraction_status = STATUS_ERROR
+                record_audit_log(
+                    db,
+                    request,
+                    "interpretive_analysis_error",
+                    entity_type="contract_extraction",
+                    entity_id=extraction.id,
+                    success=False,
+                    details="Falha ao gerar candidatos interpretativos.",
+                )
+            db.commit()
+        finally:
+            db.close()
+        return RedirectResponse(f"/documents/{document_id_for_redirect}/validate?analysis_message=erro", status_code=303)
+
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id_for_redirect).first()
+        extraction = db.query(ContractExtraction).filter(ContractExtraction.id == analyzed.id).first()
+        if document and extraction:
+            document.processing_status = STATUS_AWAITING_VALIDATION
+            document.extraction_status = STATUS_CANDIDATES_GENERATED
+            document.error_message = None
+            payload = extraction.extracted_json or {}
+            condition_count = len(payload.get("condicoes_contratuais") or [])
+            clause_count = sum(len(value) for value in (payload.get("clausulas_criticas") or {}).values() if isinstance(value, list))
+            record_audit_log(
+                db,
+                request,
+                "interpretive_analysis_completed",
+                entity_type="contract_extraction",
+                entity_id=extraction.id,
+                details=f"{condition_count} condicoes e {clause_count} clausulas candidatas.",
+            )
+            record_audit_log(
+                db,
+                request,
+                "interpretive_candidates_generated",
+                entity_type="contract_extraction",
+                entity_id=extraction.id,
+                details="Candidatos gerados para validacao humana.",
+            )
+            db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/documents/{document_id_for_redirect}/validate?analysis_message=candidatos_gerados", status_code=303)
+
+
 @app.get("/documents/{document_id:int}/validate", response_class=HTMLResponse)
-def document_validate_page(request: Request, document_id: int):
+def document_validate_page(request: Request, document_id: int, analysis_message: str | None = None, apply_message: str | None = None):
     if redirect := require_profiles(request, CONTRACT_WRITE_PROFILES | ANALYSIS_WRITE_PROFILES, "Seu perfil não permite validar documentos."):
         return redirect
     db = SessionLocal()
@@ -1922,9 +2125,16 @@ def document_validate_page(request: Request, document_id: int):
                 "user": request.session.get("user"),
                 "document": document,
                 "extraction": extraction,
-                "contract_data": extraction_section(payload, "contrato"),
-                "clause_data": extraction_section(payload, "clausulas_criticas"),
+                "contract_data": flatten_contract_candidates(payload),
+                "contract_candidates": extraction_section(payload, "contrato"),
+                "clause_data": flatten_clause_candidates(payload),
+                "clause_candidates": extraction_section(payload, "clausulas_criticas"),
                 "condition_data": first_extracted_condition(payload),
+                "condition_candidates": payload.get("condicoes_contratuais") or [],
+                "analysis_metadata": payload.get("metadata") or {},
+                "analysis_warnings": payload.get("warnings") or [],
+                "analysis_message": analysis_message,
+                "apply_message": apply_message,
             },
         )
     finally:
@@ -1984,6 +2194,8 @@ async def document_approve(request: Request, document_id: int):
         now = datetime.utcnow()
         extraction.review_status = "aprovado"
         extraction.extraction_status = "aprovado"
+        extraction.apply_status = "pendente"
+        extraction.apply_error = None
         extraction.reviewed_by = current_username(request)
         extraction.reviewed_at = now
         extraction.review_notes = str(form.get("review_notes", "")).strip() or extraction.review_notes
@@ -1999,6 +2211,105 @@ async def document_approve(request: Request, document_id: int):
         return JSONResponse({"error": "Não foi possível aprovar a extração."}, status_code=500)
     finally:
         db.close()
+
+
+@app.post("/documents/{document_id:int}/apply")
+def document_apply_approved_data(request: Request, document_id: int):
+    if redirect := require_login(request):
+        return redirect
+    if not has_profile(request.session.get("user"), APPLY_APPROVED_EXTRACTION_PROFILES):
+        db = SessionLocal()
+        try:
+            document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+            extraction = latest_extraction_for_file(db, document.id) if document else None
+            record_audit_log(
+                db,
+                request,
+                "approved_extraction_apply_forbidden",
+                entity_type="contract_extraction",
+                entity_id=extraction.id if extraction else None,
+                success=False,
+                details=f"Tentativa sem permissao no documento #{document_id}.",
+            )
+            db.commit()
+        finally:
+            db.close()
+        return forbidden_response(request, "Seu perfil nÃ£o permite aplicar dados aprovados ao cadastro.")
+
+    from .services.approved_extraction_apply_service import apply_approved_extraction
+
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction:
+            return JSONResponse({"error": "NÃ£o hÃ¡ extraÃ§Ã£o para aplicar."}, status_code=400)
+        if extraction.review_status != "aprovado":
+            record_audit_log(
+                db,
+                request,
+                "approved_extraction_apply_without_approval",
+                entity_type="contract_extraction",
+                entity_id=extraction.id,
+                success=False,
+                details="Aplicacao bloqueada: revisao ainda nao aprovada.",
+            )
+            db.commit()
+            return RedirectResponse(f"/documents/{document.id}/validate?apply_message=sem_aprovacao", status_code=303)
+        if extraction.apply_status == "aplicado":
+            record_audit_log(
+                db,
+                request,
+                "approved_extraction_apply_duplicate_blocked",
+                entity_type="contract_extraction",
+                entity_id=extraction.id,
+                success=False,
+                details="Aplicacao duplicada bloqueada.",
+            )
+            db.commit()
+            return RedirectResponse(f"/documents/{document.id}?apply_message=ja_aplicado", status_code=303)
+        extraction_id = extraction.id
+    finally:
+        db.close()
+
+    try:
+        applied_extraction, audit_events = apply_approved_extraction(extraction_id, user_id=current_username(request))
+    except Exception:
+        db = SessionLocal()
+        try:
+            extraction = db.query(ContractExtraction).filter(ContractExtraction.id == extraction_id).first()
+            record_audit_log(
+                db,
+                request,
+                "approved_extraction_apply_error",
+                entity_type="contract_extraction",
+                entity_id=extraction.id if extraction else extraction_id,
+                success=False,
+                details="Falha ao aplicar dados aprovados.",
+            )
+            db.commit()
+        finally:
+            db.close()
+        return RedirectResponse(f"/documents/{document_id}?apply_message=erro", status_code=303)
+
+    db = SessionLocal()
+    try:
+        for event in audit_events:
+            record_audit_log(
+                db,
+                request,
+                event.action,
+                entity_type=event.entity_type,
+                entity_id=event.entity_id,
+                success=event.success,
+                details=event.details,
+            )
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/documents/{document_id}?apply_message=aplicado", status_code=303)
 
 
 @app.post("/documents/{document_id:int}/reject")
@@ -2018,6 +2329,8 @@ async def document_reject(request: Request, document_id: int):
         now = datetime.utcnow()
         extraction.review_status = "rejeitado"
         extraction.extraction_status = "rejeitado"
+        extraction.apply_status = "pendente"
+        extraction.apply_error = None
         extraction.reviewed_by = current_username(request)
         extraction.reviewed_at = now
         extraction.review_notes = reason
@@ -2535,6 +2848,596 @@ def contract_terms_page(request: Request):
         db.close()
 
 
+@app.get("/contracts/{contract_id:int}/terms", response_class=HTMLResponse)
+def contract_terms_manage(request: Request, contract_id: int, simulation_message: str | None = None):
+    if redirect := require_login(request):
+        return redirect
+    from .services.contract_terms_comparison_service import get_contract_terms_versions, get_current_terms
+    from .services.reference_table_comparison_service import get_active_reference_tables
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        versions = get_contract_terms_versions(db, contract.id)
+        current_terms = get_current_terms(db, contract.id)
+        current_version = next((version for version in versions if version["is_current"]), versions[0] if versions else None)
+        additives = db.query(ContractAdditive).filter(ContractAdditive.contract_id == contract.id).order_by(ContractAdditive.created_at.desc()).all()
+        simulations = (
+            db.query(ContractTermSimulation)
+            .filter(ContractTermSimulation.contract_id == contract.id)
+            .order_by(ContractTermSimulation.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        reference_tables = get_active_reference_tables(db)
+        record_audit_log(db, request, "contract_terms_versions_viewed", entity_type="contract", entity_id=contract.id, details=f"{len(versions)} versao(oes).")
+        db.commit()
+        return templates.TemplateResponse(
+            request,
+            "contract_terms_manage.html",
+            {
+                "title": "Tabelas Contratuais",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "versions": versions,
+                "current_terms": current_terms,
+                "current_version": current_version,
+                "additives": additives,
+                "simulations": simulations,
+                "reference_tables": reference_tables,
+                "simulation_message": simulation_message,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/contracts/{contract_id:int}/terms/versions")
+def contract_terms_versions_alias(request: Request, contract_id: int):
+    return RedirectResponse(f"/contracts/{contract_id}/terms", status_code=303)
+
+
+@app.get("/contracts/{contract_id:int}/terms/compare", response_class=HTMLResponse)
+def contract_terms_compare(request: Request, contract_id: int, from_version: int, to_version: int):
+    if redirect := require_login(request):
+        return redirect
+    from .services.contract_terms_comparison_service import compare_terms_versions, get_contract_terms_versions
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        comparison = compare_terms_versions(db, contract.id, from_version, to_version)
+        versions = get_contract_terms_versions(db, contract.id)
+        record_audit_log(
+            db,
+            request,
+            "contract_terms_versions_compared",
+            entity_type="contract",
+            entity_id=contract.id,
+            details=f"v{from_version} x v{to_version}; {len(comparison['rows'])} item(ns).",
+        )
+        db.commit()
+        return templates.TemplateResponse(
+            request,
+            "contract_terms_compare.html",
+            {
+                "title": "Comparar Tabelas",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "comparison": comparison,
+                "versions": versions,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/contracts/{contract_id:int}/terms/compare/export")
+def contract_terms_compare_export(request: Request, contract_id: int, from_version: int, to_version: int):
+    if redirect := require_login(request):
+        return redirect
+    import csv
+    from io import StringIO
+
+    from .services.contract_terms_comparison_service import compare_terms_versions
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        comparison = compare_terms_versions(db, contract.id, from_version, to_version)
+        output = StringIO()
+        writer = csv.writer(output, delimiter=";")
+        writer.writerow(["Categoria", "Item", "Unidade", "Valor anterior", "Valor novo", "Diferenca R$", "Diferenca %", "Situacao", "Vigencia anterior", "Vigencia nova"])
+        for row in comparison["rows"]:
+            writer.writerow(
+                [
+                    row["category"],
+                    row["item"],
+                    row["unit"],
+                    row["old_value"] or "",
+                    row["new_value"] or "",
+                    row["difference_amount"] or "",
+                    row["difference_percent"] or "",
+                    row["change_type"],
+                    f"{row['old_valid_from'] or '-'} a {row['old_valid_until'] or 'vigente'}",
+                    f"{row['new_valid_from'] or '-'} a {row['new_valid_until'] or 'vigente'}",
+                ]
+            )
+        record_audit_log(db, request, "contract_terms_comparison_exported", entity_type="contract", entity_id=contract.id, details=f"v{from_version} x v{to_version}.")
+        db.commit()
+        filename = f"comparacao_contrato_{contract.id}_v{from_version}_v{to_version}.csv"
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        db.close()
+
+
+@app.get("/contracts/{contract_id:int}/terms/simulations", response_class=HTMLResponse)
+def contract_terms_simulations(request: Request, contract_id: int, simulation_message: str | None = None):
+    if redirect := require_login(request):
+        return redirect
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        simulations = (
+            db.query(ContractTermSimulation)
+            .filter(ContractTermSimulation.contract_id == contract.id)
+            .order_by(ContractTermSimulation.created_at.desc())
+            .all()
+        )
+        return templates.TemplateResponse(
+            request,
+            "contract_terms_simulations.html",
+            {
+                "title": "Simulacoes de Tabela",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "simulations": simulations,
+                "simulation_message": simulation_message,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/contracts/{contract_id:int}/terms/simulations/new", response_class=HTMLResponse)
+def contract_terms_simulation_new(request: Request, contract_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite criar simulacoes de tabela."):
+        return redirect
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        return templates.TemplateResponse(
+            request,
+            "contract_terms_simulation_form.html",
+            {
+                "title": "Nova Simulacao",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "row_count": 8,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/contracts/{contract_id:int}/terms/simulations")
+async def contract_terms_simulation_create(request: Request, contract_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite criar simulacoes de tabela."):
+        return redirect
+    from .services.contract_terms_simulation_service import create_manual_simulation
+
+    form = await request.form()
+    rows = []
+    for index in range(1, 21):
+        row = {
+            "category": str(form.get(f"category_{index}", "")).strip(),
+            "title": str(form.get(f"item_{index}", "")).strip(),
+            "description": str(form.get(f"description_{index}", "")).strip(),
+            "reference_value": str(form.get(f"reference_value_{index}", "")).strip(),
+            "unit": str(form.get(f"unit_{index}", "")).strip(),
+            "valid_from": str(form.get(f"valid_from_{index}", "")).strip(),
+            "valid_until": str(form.get(f"valid_until_{index}", "")).strip(),
+        }
+        if any(row.values()):
+            rows.append(row)
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+    finally:
+        db.close()
+
+    try:
+        simulation, events = create_manual_simulation(
+            contract_id=contract_id,
+            simulation_name=str(form.get("simulation_name", "")).strip() or "Simulacao manual",
+            terms=rows,
+            notes=str(form.get("notes", "")).strip() or None,
+            created_by=current_username(request),
+        )
+    except ValueError:
+        return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/new?simulation_message=erro", status_code=303)
+
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation.id}", status_code=303)
+
+
+@app.post("/documents/{document_id:int}/create-table-simulation")
+def document_create_table_simulation(request: Request, document_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite criar simulacoes de tabela."):
+        return redirect
+    from .services.contract_terms_simulation_service import create_simulation_from_extraction
+
+    db = SessionLocal()
+    try:
+        document = db.query(ContractFile).filter(ContractFile.id == document_id).first()
+        if not document:
+            return RedirectResponse("/documents", status_code=303)
+        extraction = latest_extraction_for_file(db, document.id)
+        if not extraction or extraction.review_status != "aprovado":
+            record_audit_log(
+                db,
+                request,
+                "contract_term_simulation_without_approved_extraction",
+                entity_type="contract_file",
+                entity_id=document.id,
+                success=False,
+                details="Simulacao bloqueada: documento sem extracao aprovada.",
+            )
+            db.commit()
+            return RedirectResponse(f"/documents/{document.id}?apply_message=sem_aprovacao", status_code=303)
+        extraction_id = extraction.id
+        contract_id = document.contract_id
+    finally:
+        db.close()
+
+    try:
+        simulation, events = create_simulation_from_extraction(extraction_id, created_by=current_username(request))
+    except ValueError:
+        return RedirectResponse(f"/documents/{document_id}?apply_message=erro_simulacao", status_code=303)
+
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation.id}", status_code=303)
+
+
+@app.get("/contracts/{contract_id:int}/terms/simulations/{simulation_id:int}", response_class=HTMLResponse)
+def contract_terms_simulation_detail(request: Request, contract_id: int, simulation_id: int, simulation_message: str | None = None):
+    if redirect := require_login(request):
+        return redirect
+    from .services.contract_terms_simulation_service import compare_simulation_with_current_terms
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        simulation = (
+            db.query(ContractTermSimulation)
+            .filter(ContractTermSimulation.id == simulation_id, ContractTermSimulation.contract_id == contract_id)
+            .first()
+        )
+        if not contract or not simulation:
+            return RedirectResponse(f"/contracts/{contract_id}/terms/simulations", status_code=303)
+        comparison = compare_simulation_with_current_terms(db, simulation)
+        return templates.TemplateResponse(
+            request,
+            "contract_terms_simulation_detail.html",
+            {
+                "title": "Simulacao de Tabela",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "simulation": simulation,
+                "comparison": comparison,
+                "simulation_message": simulation_message,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/contracts/{contract_id:int}/terms/simulations/{simulation_id:int}/approve")
+def contract_terms_simulation_approve(request: Request, contract_id: int, simulation_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite aprovar simulacoes."):
+        return redirect
+    from .services.contract_terms_simulation_service import approve_simulation
+
+    try:
+        simulation, events = approve_simulation(simulation_id, reviewed_by=current_username(request))
+    except ValueError:
+        return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation_id}?simulation_message=erro", status_code=303)
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation.id}?simulation_message=aprovada", status_code=303)
+
+
+@app.post("/contracts/{contract_id:int}/terms/simulations/{simulation_id:int}/cancel")
+def contract_terms_simulation_cancel(request: Request, contract_id: int, simulation_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite cancelar simulacoes."):
+        return redirect
+    from .services.contract_terms_simulation_service import cancel_simulation
+
+    try:
+        simulation, events = cancel_simulation(simulation_id, reviewed_by=current_username(request))
+    except ValueError:
+        db = SessionLocal()
+        try:
+            record_audit_log(
+                db,
+                request,
+                "contract_term_simulation_cancel_blocked",
+                entity_type="contract_term_simulation",
+                entity_id=simulation_id,
+                success=False,
+                details="Cancelamento bloqueado pelo status da simulacao.",
+            )
+            db.commit()
+        finally:
+            db.close()
+        return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation_id}?simulation_message=cancelamento_bloqueado", status_code=303)
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation.id}?simulation_message=cancelada", status_code=303)
+
+
+@app.post("/contracts/{contract_id:int}/terms/simulations/{simulation_id:int}/apply")
+def contract_terms_simulation_apply(request: Request, contract_id: int, simulation_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite aplicar simulacoes."):
+        return redirect
+    from .services.contract_terms_simulation_service import apply_simulation_to_contract_terms
+
+    db = SessionLocal()
+    try:
+        simulation = (
+            db.query(ContractTermSimulation)
+            .filter(ContractTermSimulation.id == simulation_id, ContractTermSimulation.contract_id == contract_id)
+            .first()
+        )
+        if not simulation:
+            return RedirectResponse(f"/contracts/{contract_id}/terms/simulations", status_code=303)
+        if simulation.simulation_status == "aplicada":
+            record_audit_log(
+                db,
+                request,
+                "contract_term_simulation_apply_duplicate_blocked",
+                entity_type="contract_term_simulation",
+                entity_id=simulation.id,
+                success=False,
+                details="Aplicacao duplicada bloqueada.",
+            )
+            db.commit()
+            return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation.id}?simulation_message=ja_aplicada", status_code=303)
+        if simulation.simulation_status != "aprovada":
+            record_audit_log(
+                db,
+                request,
+                "contract_term_simulation_apply_without_approval",
+                entity_type="contract_term_simulation",
+                entity_id=simulation.id,
+                success=False,
+                details="Aplicacao bloqueada: simulacao ainda nao aprovada.",
+            )
+            db.commit()
+            return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation.id}?simulation_message=sem_aprovacao", status_code=303)
+    finally:
+        db.close()
+
+    try:
+        simulation, events = apply_simulation_to_contract_terms(simulation_id, applied_by=current_username(request))
+    except ValueError:
+        db = SessionLocal()
+        try:
+            record_audit_log(
+                db,
+                request,
+                "contract_term_simulation_apply_error",
+                entity_type="contract_term_simulation",
+                entity_id=simulation_id,
+                success=False,
+                details="Falha controlada ao aplicar simulacao.",
+            )
+            db.commit()
+        finally:
+            db.close()
+        return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation_id}?simulation_message=erro_aplicacao", status_code=303)
+
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/contracts/{contract_id}/terms?simulation_message=simulacao_aplicada", status_code=303)
+
+
+@app.get("/contracts/{contract_id:int}/terms/reference-compare", response_class=HTMLResponse)
+def contract_terms_reference_compare(request: Request, contract_id: int, reference_table_id: int | None = None):
+    if redirect := require_login(request):
+        return redirect
+    from .services.reference_table_comparison_service import compare_terms_with_reference, get_active_reference_tables
+
+    db = SessionLocal()
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            return RedirectResponse("/contracts", status_code=303)
+        comparison = compare_terms_with_reference(db, contract.id, reference_table_id)
+        reference_tables = get_active_reference_tables(db)
+        record_audit_log(
+            db,
+            request,
+            "contract_terms_reference_compared",
+            entity_type="contract",
+            entity_id=contract.id,
+            details=f"{len(comparison.get('rows') or [])} item(ns) comparados com referencia.",
+        )
+        db.commit()
+        return templates.TemplateResponse(
+            request,
+            "contract_terms_reference_compare.html",
+            {
+                "title": "Comparacao com Referencia",
+                "active_page": "contract_terms",
+                "user": request.session.get("user"),
+                "contract": contract,
+                "comparison": comparison,
+                "reference_tables": reference_tables,
+                "selected_reference_table_id": reference_table_id,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/reference-tables", response_class=HTMLResponse)
+def reference_tables_page(request: Request):
+    if redirect := require_login(request):
+        return redirect
+    db = SessionLocal()
+    try:
+        tables = db.query(ReferenceTable).order_by(ReferenceTable.created_at.desc()).all()
+        item_counts = {
+            table.id: db.query(ReferenceTableItem).filter(ReferenceTableItem.reference_table_id == table.id).count()
+            for table in tables
+        }
+        return templates.TemplateResponse(
+            request,
+            "reference_tables.html",
+            {
+                "title": "Tabelas de Referencia",
+                "active_page": "reference_tables",
+                "user": request.session.get("user"),
+                "tables": tables,
+                "item_counts": item_counts,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/reference-tables/new", response_class=HTMLResponse)
+def reference_table_new(request: Request):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite criar tabela de referencia."):
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "reference_table_form.html",
+        {
+            "title": "Nova Tabela de Referencia",
+            "active_page": "reference_tables",
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.post("/reference-tables")
+async def reference_table_create(request: Request):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite criar tabela de referencia."):
+        return redirect
+    form = await request.form()
+    db = SessionLocal()
+    try:
+        table = ReferenceTable(
+            name=str(form.get("name", "")).strip(),
+            source=str(form.get("source", "")).strip() or None,
+            version=str(form.get("version", "")).strip() or None,
+            valid_from=parse_optional_date(str(form.get("valid_from", "")).strip()),
+            valid_until=parse_optional_date(str(form.get("valid_until", "")).strip()),
+            status=str(form.get("status", "active")).strip() or "active",
+            created_by=current_username(request),
+        )
+        if not table.name:
+            return RedirectResponse("/reference-tables/new?reference_message=nome_obrigatorio", status_code=303)
+        db.add(table)
+        db.flush()
+        record_audit_log(db, request, "reference_table_created", entity_type="reference_table", entity_id=table.id, details=table.name)
+        db.commit()
+        return RedirectResponse("/reference-tables", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Nao foi possivel criar a tabela de referencia."}, status_code=500)
+    finally:
+        db.close()
+
+
+@app.post("/reference-tables/{reference_table_id:int}/items")
+async def reference_table_item_create(request: Request, reference_table_id: int):
+    if redirect := require_profiles(request, APPLY_APPROVED_EXTRACTION_PROFILES, "Seu perfil nao permite editar tabela de referencia."):
+        return redirect
+    from decimal import Decimal, InvalidOperation
+
+    form = await request.form()
+    db = SessionLocal()
+    try:
+        table = db.query(ReferenceTable).filter(ReferenceTable.id == reference_table_id).first()
+        if not table:
+            return RedirectResponse("/reference-tables", status_code=303)
+        raw_value = str(form.get("value", "")).strip().replace(".", "").replace(",", ".")
+        value = None
+        if raw_value:
+            try:
+                value = Decimal(raw_value)
+            except InvalidOperation:
+                value = None
+        item = ReferenceTableItem(
+            reference_table_id=table.id,
+            category=str(form.get("category", "")).strip() or None,
+            item=str(form.get("item", "")).strip(),
+            description=str(form.get("description", "")).strip() or None,
+            value=value,
+            unit=str(form.get("unit", "")).strip() or None,
+            notes=str(form.get("notes", "")).strip() or None,
+        )
+        if not item.item:
+            return RedirectResponse("/reference-tables", status_code=303)
+        db.add(item)
+        db.flush()
+        record_audit_log(db, request, "reference_table_item_created", entity_type="reference_table_item", entity_id=item.id, details=item.item)
+        db.commit()
+        return RedirectResponse("/reference-tables", status_code=303)
+    except SQLAlchemyError:
+        db.rollback()
+        return JSONResponse({"error": "Nao foi possivel criar o item de referencia."}, status_code=500)
+    finally:
+        db.close()
+
+
 @app.post("/contract-terms")
 def contract_term_create(
     request: Request,
@@ -2543,6 +3446,7 @@ def contract_term_create(
     title: str = Form(...),
     description: str = Form(default=""),
     reference_value: str = Form(default=""),
+    unit: str = Form(default=""),
     deadline_days: str = Form(default=""),
     version: int = Form(default=1),
     valid_from: str = Form(default=""),
@@ -2562,6 +3466,7 @@ def contract_term_create(
             title=title.strip(),
             description=description.strip() or None,
             reference_value=float(amount) if amount else None,
+            unit=unit.strip() or None,
             deadline_days=parse_optional_int(deadline_days),
             version=version,
             valid_from=parse_optional_date(valid_from),
@@ -2569,6 +3474,7 @@ def contract_term_create(
             is_current=bool(is_current),
             source_type=source_type.strip() or "manual",
             rule_text=rule_text.strip() or None,
+            created_by=current_username(request),
         )
         db.add(term)
         db.flush()
@@ -2589,6 +3495,7 @@ def contract_term_edit(
     title: str = Form(...),
     description: str = Form(default=""),
     reference_value: str = Form(default=""),
+    unit: str = Form(default=""),
     deadline_days: str = Form(default=""),
     version: int = Form(default=1),
     valid_from: str = Form(default=""),
@@ -2608,6 +3515,7 @@ def contract_term_edit(
         term.title = title.strip()
         term.description = description.strip() or None
         term.reference_value = float(amount) if amount else None
+        term.unit = unit.strip() or None
         term.deadline_days = parse_optional_int(deadline_days)
         term.version = version
         term.valid_from = parse_optional_date(valid_from)

@@ -34,6 +34,7 @@
                 <a class="nav-item {% if active_page == 'documents' %}active{% endif %}" href="/documents"><span>E</span>Documentos e Extração</a>
                 <a class="nav-item {% if active_page == 'operators' %}active{% endif %}" href="/operators"><span>O</span>Operadoras</a>
                 <a class="nav-item {% if active_page == 'contract_terms' %}active{% endif %}" href="/contract-terms"><span>T</span>Condições Contratuais</a>
+                <a class="nav-item {% if active_page == 'reference_tables' %}active{% endif %}" href="/reference-tables"><span>R</span>Tabelas de Referencia</a>
                 {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
                 <a class="nav-item" href="/contracts/import"><span>U</span>Importar Contrato</a>
                 {% endif %}

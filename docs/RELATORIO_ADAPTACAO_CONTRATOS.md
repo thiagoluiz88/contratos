@@ -272,3 +272,63 @@ Tambem foram executadas validacoes locais com AST, import da aplicacao, parsing 
 - Ampliar comparacoes para destacar diferenca monetaria por item de condicao contratual.
 - Proxima etapa recomendada: integrar OCR/parser real ao `document_processing_service.py`, mantendo validacao humana obrigatoria antes de aplicar dados em `contracts` e `contract_terms`.
 - Proxima etapa recomendada: integrar IA interpretativa para identificar valores, prazos, indices, clausulas criticas e condicoes contratuais, mantendo validacao humana antes de aplicar dados no banco.
+## Atualizacao - Analise interpretativa de documentos
+
+Foi adicionada uma primeira camada de analise interpretativa local sobre o texto bruto extraido dos documentos.
+
+- Novo motor deterministico em `app/services/contract_ai_analysis_service.py`.
+- Nova rota `POST /documents/{id}/analyze`.
+- `contract_extractions.extracted_json` passa a armazenar candidatos estruturados, nao dados automaticamente aplicados.
+- A validacao humana permanece obrigatoria.
+- A tela de validacao mostra valor sugerido, confidence e evidence.
+- Eventos de auditoria registram inicio, ausencia de texto, erro, conclusao e candidatos gerados.
+- Nenhuma API paga ou externa e chamada.
+
+A aplicacao dos dados aprovados em `contracts`, `operators` e `contract_terms` permanece como etapa futura.
+
+## Atualizacao - Aplicacao de dados aprovados
+
+Foi adicionada a etapa segura de aplicacao ao cadastro definitivo.
+
+- Nova migration `4b8c1d2e3f90_add_extraction_apply_tracking.py`.
+- Novos campos em `contract_extractions`: `apply_status`, `applied_by`, `applied_at`, `apply_summary`, `apply_error`.
+- Novo servico `approved_extraction_apply_service.py`.
+- Nova rota `POST /documents/{id}/apply`.
+- A aplicacao so ocorre depois de `review_status=aprovado`.
+- Operadoras sao localizadas por CNPJ ou nome antes de criar novo cadastro.
+- Contratos sao atualizados sem sobrescrever campos preenchidos.
+- Aditivos sao vinculados ao contrato principal.
+- Condicoes aprovadas criam nova versao em `contract_terms`, preservando historico.
+- A interface exibe status, resumo, pendencias e links de navegacao.
+
+## Atualizacao - Modulo 2 Gestao de Tabelas
+
+Foi iniciada a gestao versionada de tabelas contratuais.
+
+- Nova migration `6c9d2e4f1a70_add_contract_term_unit_and_created_by.py`.
+- `contract_terms` recebeu `unit` e `created_by`.
+- Novo servico `contract_terms_comparison_service.py`.
+- Nova tela `/contracts/{id}/terms` para tabela atual, historico e aditivos.
+- Nova tela `/contracts/{id}/terms/compare` para comparar versoes.
+- Exportacao CSV em `/contracts/{id}/terms/compare/export`.
+- Comparacao classifica itens novos, removidos, aumento, reducao e alteracoes de descricao/unidade/vigencia.
+- Estrutura futura `reference_table_comparison_service.py` preparada sem dados ficticios.
+
+## Atualizacao - Modulo 2 Simulacao e Referencia
+
+Foi adicionada a camada de simulacao de novas tabelas antes da aplicacao oficial.
+
+- Nova migration `8d1f2a3b4c50_add_term_simulations_and_reference_tables.py`.
+- Novos modelos `ContractTermSimulation`, `ReferenceTable` e `ReferenceTableItem`.
+- Novo servico `contract_terms_simulation_service.py`.
+- Simulacoes podem ser criadas manualmente ou a partir de extracao aprovada.
+- A simulacao compara tabela vigente x proposta sem alterar `contract_terms`.
+- A aplicacao so e permitida depois de aprovacao da simulacao.
+- A aplicacao preserva versoes antigas e cria nova versao oficial.
+- Nova tela `/contracts/{id}/terms/simulations`.
+- Nova tela `/contracts/{id}/terms/simulations/new`.
+- Nova tela `/contracts/{id}/terms/simulations/{simulation_id}`.
+- Nova rota `POST /documents/{id}/create-table-simulation`.
+- Nova area `/reference-tables` para cadastrar tabela de referencia vazia/manual.
+- Nova tela `/contracts/{id}/terms/reference-compare`.
+- Nenhum dado CBHPM, mercado ou valor ficticio foi criado.

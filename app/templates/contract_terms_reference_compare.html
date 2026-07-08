@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Comparacao com Referencia</h1>
+        <p>{{ contract.contract_name }} · base para defasagem futura.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="secondary-action" href="/contracts/{{ contract.id }}/terms">Tabela contratual</a>
+        <a class="secondary-action" href="/reference-tables">Referencias</a>
+    </div>
+</header>
+
+<section class="panel">
+    <form method="get" action="/contracts/{{ contract.id }}/terms/reference-compare" class="form-grid three-cols">
+        <label><span>Tabela de referencia</span><select name="reference_table_id">
+            {% for table in reference_tables %}
+            <option value="{{ table.id }}" {% if selected_reference_table_id == table.id %}selected{% endif %}>{{ table.name }} {{ table.version or "" }}</option>
+            {% endfor %}
+        </select></label>
+        <div class="inline-actions"><button class="btn btn-primary" type="submit">Comparar</button></div>
+    </form>
+    {% if comparison.message %}<div class="empty-state inline">{{ comparison.message }}</div>{% endif %}
+</section>
+
+<section class="stats-grid four-inline">
+    <article class="mini-card"><span>Itens</span><strong>{{ comparison.summary.total }}</strong></article>
+    <article class="mini-card"><span>Acima</span><strong>{{ comparison.summary.counts.acima_referencia }}</strong></article>
+    <article class="mini-card"><span>Abaixo</span><strong>{{ comparison.summary.counts.abaixo_referencia }}</strong></article>
+    <article class="mini-card"><span>Sem referencia</span><strong>{{ comparison.summary.counts.sem_referencia }}</strong></article>
+</section>
+
+<section class="panel">
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead><tr><th>Categoria</th><th>Item</th><th>Unidade</th><th>Contrato</th><th>Referencia</th><th>Defasagem %</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for row in comparison.rows %}
+                <tr>
+                    <td>{{ row.category }}</td>
+                    <td><strong>{{ row.item }}</strong></td>
+                    <td>{{ row.unit or "-" }}</td>
+                    <td>{{ row.contract_value or "-" }}</td>
+                    <td>{{ row.reference_value or "-" }}</td>
+                    <td>{{ row.gap_percent or "-" }}</td>
+                    <td><span class="status-pill pending">{{ row.classification }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7"><div class="empty-state inline">Nenhum item comparado.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
