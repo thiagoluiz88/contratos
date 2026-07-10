@@ -332,3 +332,22 @@ Foi adicionada a camada de simulacao de novas tabelas antes da aplicacao oficial
 - Nova area `/reference-tables` para cadastrar tabela de referencia vazia/manual.
 - Nova tela `/contracts/{id}/terms/reference-compare`.
 - Nenhum dado CBHPM, mercado ou valor ficticio foi criado.
+# Atualizacao: testes automatizados do Modulo 2
+
+Foi adicionada uma suite pytest permanente para simulacoes, versionamento, bloqueios, referencias, extracoes aprovadas, auditoria e rotas. Os registros de teste usam marcadores UUID e sao removidos ao final. O comando consolidado e `python -m scripts.run_quality_checks`; detalhes estao em `docs/TESTES_AUTOMATIZADOS.md`.
+
+## Atualizacao: primeira versao do BI Comercial
+
+O Modulo 4 passou a oferecer cards executivos, Score Comercial por operadora, extremos por categoria, alertas de qualidade, comparacao entre contratos e exportacoes CSV. Todos os indicadores usam dados oficiais vigentes e deixam explicito que nao representam rentabilidade real sem producao e custos.
+
+## Atualizacao: base de producao e custos
+
+Foram adicionados lotes rastreaveis de importacao CSV, registros de producao por linha, pendencias sem interrupcao do lote, vinculo conservador com operadora/contrato, consolidacao filtravel, CSV e calculos financeiros basicos com mensagens de insuficiencia. Nenhum dado de producao ou custo foi inventado.
+
+## Atualizacao: layouts e precificacao historica
+
+A importacao passou a aceitar layouts configuraveis e Excel `.xlsx`, preservando o fallback de aliases. Lotes registram o layout e o reconhecimento de colunas. A receita esperada agora seleciona a versao contratual pela data do atendimento, sem fallback silencioso para preco atual.
+
+## Atualizacao: preview e custos indiretos
+
+Foi criado preview temporario sem lote/registro definitivo e uma base de centros de custo e regras de rateio. Estimativas indiretas permanecem consultivas e separadas de margem final.

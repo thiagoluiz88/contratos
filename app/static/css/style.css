@@ -2983,3 +2983,5 @@ svg {
         grid-template-columns: 1fr;
     }
 }
+.comparison-high { background: #e8f7ef; color: #176b43; font-weight: 700; }
+.comparison-low { background: #fff1f0; color: #a33a32; font-weight: 700; }

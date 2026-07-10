@@ -101,6 +101,14 @@ def validate_simulated_terms(rows: list[dict[str, Any]]) -> tuple[list[dict[str,
             continue
         if normalized["reference_value"] is None:
             warnings.append(f"Linha {index} sem valor aprovado: {normalized['title']}.")
+        valid_from = parse_date(normalized.get("valid_from"))
+        valid_until = parse_date(normalized.get("valid_until"))
+        if normalized.get("valid_from") and valid_from is None:
+            warnings.append(f"Linha {index} com inicio de vigencia invalido: {normalized['title']}.")
+        if normalized.get("valid_until") and valid_until is None:
+            warnings.append(f"Linha {index} com fim de vigencia invalido: {normalized['title']}.")
+        if valid_from and valid_until and valid_until < valid_from:
+            warnings.append(f"Linha {index} com fim de vigencia anterior ao inicio: {normalized['title']}.")
         valid.append(normalized)
     return valid, warnings
 
@@ -155,6 +163,7 @@ def create_manual_simulation(
     terms: list[dict[str, Any]],
     notes: str | None = None,
     created_by: str | None = None,
+    base_version: int | None = None,
 ) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
     db = SessionLocal()
     try:
@@ -165,7 +174,7 @@ def create_manual_simulation(
         simulation = ContractTermSimulation(
             contract_id=contract.id,
             simulation_name=simulation_name.strip() or f"Simulacao contrato {contract.id}",
-            base_version=current_base_version(db, contract.id),
+            base_version=base_version if base_version is not None else current_base_version(db, contract.id),
             simulated_version=next_simulated_version(db, contract.id),
             simulation_status=SIM_STATUS_SIMULATED,
             simulated_terms_json=valid_terms,
@@ -233,12 +242,14 @@ def compare_simulation_with_current_terms(db: Session, simulation: ContractTermS
     )
 
 
-def approve_simulation(simulation_id: int, *, reviewed_by: str | None = None) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
+def approve_simulation(simulation_id: int, *, reviewed_by: str | None = None, contract_id: int | None = None) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
     db = SessionLocal()
     try:
         simulation = get_simulation(db, simulation_id)
         if not simulation:
             raise ValueError("Simulacao nao encontrada.")
+        if contract_id is not None and simulation.contract_id != contract_id:
+            raise ValueError("Simulacao nao pertence ao contrato informado.")
         if simulation.simulation_status in {SIM_STATUS_APPLIED, SIM_STATUS_CANCELLED}:
             raise ValueError("Simulacao nao pode ser aprovada neste status.")
         simulation.simulation_status = SIM_STATUS_APPROVED
@@ -254,12 +265,14 @@ def approve_simulation(simulation_id: int, *, reviewed_by: str | None = None) ->
         db.close()
 
 
-def cancel_simulation(simulation_id: int, *, reviewed_by: str | None = None) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
+def cancel_simulation(simulation_id: int, *, reviewed_by: str | None = None, contract_id: int | None = None) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
     db = SessionLocal()
     try:
         simulation = get_simulation(db, simulation_id)
         if not simulation:
             raise ValueError("Simulacao nao encontrada.")
+        if contract_id is not None and simulation.contract_id != contract_id:
+            raise ValueError("Simulacao nao pertence ao contrato informado.")
         if simulation.simulation_status == SIM_STATUS_APPLIED:
             raise ValueError("Simulacao aplicada nao pode ser cancelada.")
         simulation.simulation_status = SIM_STATUS_CANCELLED
@@ -275,16 +288,21 @@ def cancel_simulation(simulation_id: int, *, reviewed_by: str | None = None) -> 
         db.close()
 
 
-def apply_simulation_to_contract_terms(simulation_id: int, *, applied_by: str | None = None) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
+def apply_simulation_to_contract_terms(simulation_id: int, *, applied_by: str | None = None, contract_id: int | None = None) -> tuple[ContractTermSimulation, list[SimulationAuditEvent]]:
     db = SessionLocal()
     events: list[SimulationAuditEvent] = []
+    application_started = False
     try:
         simulation = get_simulation(db, simulation_id)
         if not simulation:
             raise ValueError("Simulacao nao encontrada.")
+        if contract_id is not None and simulation.contract_id != contract_id:
+            raise ValueError("Simulacao nao pertence ao contrato informado.")
         if simulation.simulation_status != SIM_STATUS_APPROVED:
             raise ValueError("Somente simulacao aprovada pode ser aplicada.")
-        version = simulation.simulated_version or next_simulated_version(db, simulation.contract_id)
+        # O numero proposto pode ter ficado obsoleto se outra simulacao foi aplicada
+        # depois da criacao. A versao oficial e sempre calculada no momento da aplicacao.
+        version = next_simulated_version(db, simulation.contract_id)
         creatable_rows = [
             row
             for row in (simulation.simulated_terms_json or [])
@@ -292,11 +310,12 @@ def apply_simulation_to_contract_terms(simulation_id: int, *, applied_by: str | 
         ]
         if not creatable_rows:
             raise ValueError("Simulacao sem itens validos para aplicar.")
+        application_started = True
         current_terms = db.query(ContractTerm).filter(ContractTerm.contract_id == simulation.contract_id, ContractTerm.is_current.is_(True)).all()
-        valid_from = next((parse_date(row.get("valid_from")) for row in creatable_rows if parse_date(row.get("valid_from"))), None)
+        valid_from = next((parse_date(row.get("valid_from")) for row in creatable_rows if parse_date(row.get("valid_from"))), None) or date.today()
         for term in current_terms:
             term.is_current = False
-            term.valid_until = valid_from or term.valid_until
+            term.valid_until = valid_from
             events.append(SimulationAuditEvent("contract_term_simulation_previous_version_closed", "contract_term", term.id, term.title))
         created_count = 0
         for row in creatable_rows:
@@ -321,6 +340,7 @@ def apply_simulation_to_contract_terms(simulation_id: int, *, applied_by: str | 
             created_count += 1
             events.append(SimulationAuditEvent("contract_term_simulation_new_official_version_created", "contract_term", term.id, term.title))
         simulation.simulation_status = SIM_STATUS_APPLIED
+        simulation.simulated_version = version
         simulation.applied_by = applied_by
         simulation.applied_at = datetime.utcnow()
         simulation.error_message = None
@@ -335,7 +355,7 @@ def apply_simulation_to_contract_terms(simulation_id: int, *, applied_by: str | 
     except Exception as exc:
         db.rollback()
         simulation = db.query(ContractTermSimulation).filter(ContractTermSimulation.id == simulation_id).first()
-        if simulation:
+        if simulation and application_started:
             simulation.simulation_status = SIM_STATUS_ERROR
             simulation.error_message = "Falha ao aplicar simulacao."
             db.commit()

@@ -20,6 +20,10 @@ Permitir que a equipe simule uma nova tabela contratual antes de gravar dados de
 - Versoes antigas nao sao apagadas.
 - Nao ha chamada de API externa.
 - Nao ha dados ficticios de mercado.
+- A versao-base vigente e registrada na criacao para manter a rastreabilidade da comparacao.
+- O numero definitivo da nova versao e recalculado durante a aplicacao, evitando colisao com outra simulacao aplicada no intervalo.
+- Sem vigencia inicial informada, a aplicacao usa a data corrente e encerra explicitamente a versao anterior nessa data.
+- Itens sem valor permanecem como pendencia da simulacao e nao sao gravados na tabela oficial.
 
 ## Rotas
 
@@ -54,3 +58,9 @@ O calculo de defasagem comercial ainda e preparatorio. A etapa futura deve consi
 8. Confira `/contracts/{id}/terms` e o historico.
 9. Cadastre uma referencia vazia/manual em `/reference-tables`.
 10. Compare em `/contracts/{id}/terms/reference-compare`.
+
+Na tela de detalhe, confira tambem a lista de pendencias de validacao. Uma tentativa bloqueada (sem aprovacao, duplicada ou cancelamento posterior) nao altera o estado final ja aplicado.
+
+## Testes automatizados
+
+A protecao permanente do fluxo esta em `tests/`. Execute `python -m pytest tests/test_contract_terms_simulations.py` para validar simulacao e versionamento ou `python -m scripts.run_quality_checks` para a verificacao completa. Consulte `docs/TESTES_AUTOMATIZADOS.md` para pre-requisitos, isolamento e limitacoes.

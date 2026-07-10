@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="topbar">
+    <div><h1>BI Comercial</h1><p>Visão executiva baseada em condições contratuais oficiais vigentes.</p></div>
+    <div class="topbar-actions"><a class="secondary-action" href="/bi/commercial/operators">Ranking completo</a><a class="primary-button compact" href="/bi/commercial/compare">Comparativo executivo</a></div>
+</header>
+
+<section class="panel"><div class="empty-state inline"><strong>Leitura conservadora:</strong> {{ summary.disclaimer }}</div></section>
+
+<section class="stats-grid four-inline">
+    <article class="mini-card"><span>Operadoras ativas</span><strong>{{ summary.active_operators }}</strong></article>
+    <article class="mini-card"><span>Contratos ativos</span><strong>{{ summary.active_contracts }}</strong></article>
+    <article class="mini-card"><span>Com tabela vigente</span><strong>{{ summary.contracts_with_current_terms }}</strong></article>
+    <article class="mini-card"><span>Sem tabela vigente</span><strong>{{ summary.contracts_without_current_terms }}</strong></article>
+    <article class="mini-card"><span>Itens vigentes</span><strong>{{ summary.current_terms }}</strong></article>
+    <article class="mini-card"><span>Com referência comparável</span><strong>{{ summary.contracts_with_reference_match }}</strong></article>
+    <article class="mini-card"><span>Sem referência comparável</span><strong>{{ summary.contracts_without_reference_match }}</strong></article>
+    <article class="mini-card"><span>Simulações pendentes</span><strong>{{ summary.pending_simulations }}</strong></article>
+    <article class="mini-card"><span>Registros de produção</span><strong>{{ summary.production_records }}</strong></article>
+    <article class="mini-card"><span>Lotes processados</span><strong>{{ summary.processed_production_batches }}</strong></article>
+    <article class="mini-card"><span>Faturado importado</span><strong>{{ summary.imported_billed_value }}</strong></article>
+    <article class="mini-card"><span>Pago importado</span><strong>{{ summary.imported_paid_value }}</strong></article>
+    <article class="mini-card"><span>Glosado importado</span><strong>{{ summary.imported_denied_value }}</strong></article>
+    <article class="mini-card"><span>Custo importado</span><strong>{{ summary.imported_cost_value if summary.imported_cost_value is not none else 'Custo não informado' }}</strong></article>
+</section>
+
+{% if summary.reference_message %}<section class="panel"><div class="candidate-warning-list"><div>{{ summary.reference_message }}</div></div></section>{% endif %}
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Ranking por Score Comercial</h2><p>Índice de completude e comparabilidade contratual; não representa rentabilidade real.</p></div>{% if has_profile(user, COMMERCIAL_BI_EXPORT_PROFILES) %}<a class="secondary-action" href="/bi/commercial/export/ranking">Exportar CSV</a>{% endif %}</div>
+    <div class="table-wrap"><table class="contracts-table"><thead><tr><th>#</th><th>Operadora</th><th>Score</th><th>Contratos</th><th>Com tabela</th><th>Itens</th></tr></thead><tbody>
+    {% for row in ranking %}<tr><td>{{ row.position }}</td><td><strong>{{ row.operator.name }}</strong></td><td>{{ row.score }}</td><td>{{ row.contract_count }}</td><td>{{ row.contracts_with_terms }}</td><td>{{ row.item_count }}</td></tr>
+    {% else %}<tr><td colspan="6"><div class="empty-state inline">Sem operadoras com contratos ativos para ranquear.</div></td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Melhores e piores condições por categoria</h2><p>Extremos nominais entre itens vigentes; categorias e unidades diferentes não devem ser interpretadas como margem.</p></div>{% if has_profile(user, COMMERCIAL_BI_EXPORT_PROFILES) %}<a class="secondary-action" href="/bi/commercial/export/conditions">Exportar CSV</a>{% endif %}</div>
+    <div class="table-wrap"><table class="contracts-table"><thead><tr><th>Categoria</th><th>Amostra</th><th>Maior</th><th>Operadora / contrato</th><th>Menor</th><th>Operadora / contrato</th><th>Situação</th></tr></thead><tbody>
+    {% for row in conditions %}<tr><td><strong>{{ row.category }}</strong></td><td>{{ row.item_count }}</td><td>{{ row.highest.reference_value if row.highest else '-' }}</td><td>{{ row.highest_contract.operator_name or '-' if row.highest_contract else '-' }}<small>{{ row.highest_contract.contract_name if row.highest_contract else '' }}</small></td><td>{{ row.lowest.reference_value if row.lowest else '-' }}</td><td>{{ row.lowest_contract.operator_name or '-' if row.lowest_contract else '-' }}<small>{{ row.lowest_contract.contract_name if row.lowest_contract else '' }}</small></td><td>{{ row.message or row.status }}</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Alertas de qualidade comercial</h2><p>Pendências cadastrais que limitam análises e negociações.</p></div></div>
+    <div class="table-wrap"><table class="contracts-table"><thead><tr><th>Severidade</th><th>Tipo</th><th>Contrato / operadora</th><th>Alerta</th></tr></thead><tbody>
+    {% for alert in alerts %}<tr><td><span class="status-pill pending">{{ alert.severity }}</span></td><td>{{ alert.type }}</td><td>{% if alert.contract %}<a href="/contracts/{{ alert.contract.id }}">{{ alert.contract.contract_name }}</a>{% elif alert.operator %}{{ alert.operator.name }}{% else %}-{% endif %}</td><td>{{ alert.message }}</td></tr>
+    {% else %}<tr><td colspan="4"><div class="empty-state inline">Nenhum alerta comercial encontrado.</div></td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% endblock %}

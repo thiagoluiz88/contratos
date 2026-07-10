@@ -16,6 +16,7 @@
     <form method="post" action="/contracts/{{ contract.id }}/terms/simulations">
         <div class="form-grid two-cols">
             <label><span>Nome</span><input name="simulation_name" required placeholder="Aditivo julho 2026"></label>
+            <label><span>Versao base</span><input type="number" name="base_version" min="1" value="{{ base_version or '' }}" readonly><small>Versao oficial vigente usada na comparacao.</small></label>
             <label><span>Observacoes</span><input name="notes" placeholder="Origem, contexto ou pendencias"></label>
         </div>
         <div class="table-wrap margin-top">

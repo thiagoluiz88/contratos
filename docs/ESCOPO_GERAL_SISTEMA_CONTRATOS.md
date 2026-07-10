@@ -291,3 +291,6 @@ A comparacao identifica itens sem alteracao, novos, removidos, aumentos, reducoe
 O sistema passa a permitir simulacao de uma nova tabela contratual antes da aplicacao oficial. A simulacao e separada de `contract_terms`, pode ser revisada, comparada e aprovada, e somente depois de acao humana pode virar uma nova versao oficial.
 
 Tambem foi criada uma base para tabelas de referencia manuais. O sistema nao cria CBHPM nem valores de mercado automaticamente; a referencia depende de dados reais cadastrados pelo usuario. A proxima etapa sera usar essas referencias para BI Comercial e calculo de defasagem por operadora.
+# Modulo 4 - BI Comercial
+
+A primeira versao funcional consolida contratos e condicoes oficiais vigentes em indicadores conservadores, ranking por Score Comercial, melhores/piores condicoes, alertas cadastrais, comparativo executivo e CSV. Rentabilidade real permanece fora do escopo ate a integracao de volume assistencial e custos. Consulte `docs/MODULO_4_BI_COMERCIAL.md`.

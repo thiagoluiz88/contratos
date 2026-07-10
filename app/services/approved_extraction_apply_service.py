@@ -331,6 +331,7 @@ def build_apply_summary(ctx: ApplyContext) -> dict[str, Any]:
 
 def apply_approved_extraction(extraction_id: int, user_id: str | None = None) -> tuple[ContractExtraction, list[AuditEvent]]:
     db = SessionLocal()
+    application_started = False
     try:
         extraction = db.query(ContractExtraction).filter(ContractExtraction.id == extraction_id).first()
         if not extraction:
@@ -341,6 +342,7 @@ def apply_approved_extraction(extraction_id: int, user_id: str | None = None) ->
             raise ValueError("Extracao ja aplicada ao cadastro.")
 
         extraction.applied_by = user_id
+        application_started = True
         ctx = ApplyContext(extraction=extraction, payload=normalize_reviewed_json(extraction.extracted_json))
         ctx.audit_events.append(AuditEvent("approved_extraction_apply_started", "contract_extraction", extraction.id, "Aplicacao iniciada."))
         operator = apply_operator_data(db, ctx)
@@ -362,7 +364,7 @@ def apply_approved_extraction(extraction_id: int, user_id: str | None = None) ->
     except Exception as exc:
         db.rollback()
         extraction = db.query(ContractExtraction).filter(ContractExtraction.id == extraction_id).first()
-        if extraction:
+        if extraction and application_started:
             extraction.apply_status = APPLY_STATUS_ERROR
             extraction.apply_error = "Falha ao aplicar dados aprovados."
             extraction.apply_summary = {"erros": ["Falha ao aplicar dados aprovados."], "pendencias": []}

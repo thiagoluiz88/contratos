@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy import or_, text
+from sqlalchemy import func, or_, text
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import (
@@ -37,8 +37,14 @@ from .models import (
     ContractFile,
     ContractTerm,
     ContractTermSimulation,
+    CostAllocationRule,
+    CostCenter,
     ImportBatch,
     Operator,
+    ProductionImportBatch,
+    ProductionImportLayout,
+    ProductionImportLayoutMapping,
+    ProductionRecord,
     ReferenceTable,
     ReferenceTableItem,
     User,
@@ -53,7 +59,11 @@ from .services.auth import (
     DEFAULT_REGISTER_PROFILE,
     FINANCIAL_PROFILES,
     PROFILE_ADMIN,
+    PROFILE_AUDIT,
+    PROFILE_CONTRACTS,
     PROFILE_EXECUTIVE,
+    PROFILE_FINANCIAL,
+    PROFILE_READ_ONLY,
     ensure_initial_admin,
     get_access_profile,
     has_profile,
@@ -66,6 +76,14 @@ from .services.auth import (
 )
 
 APPLY_APPROVED_EXTRACTION_PROFILES = CONTRACT_WRITE_PROFILES | {PROFILE_EXECUTIVE}
+COMMERCIAL_BI_VIEW_PROFILES = {PROFILE_ADMIN, PROFILE_EXECUTIVE, PROFILE_CONTRACTS, PROFILE_FINANCIAL, PROFILE_AUDIT, PROFILE_READ_ONLY}
+COMMERCIAL_BI_EXPORT_PROFILES = COMMERCIAL_BI_VIEW_PROFILES - {PROFILE_READ_ONLY}
+PRODUCTION_VIEW_PROFILES = {PROFILE_ADMIN, PROFILE_EXECUTIVE, PROFILE_CONTRACTS, PROFILE_FINANCIAL, PROFILE_AUDIT}
+PRODUCTION_IMPORT_PROFILES = {PROFILE_ADMIN, PROFILE_CONTRACTS, PROFILE_FINANCIAL}
+PRODUCTION_LAYOUT_VIEW_PROFILES = COMMERCIAL_BI_VIEW_PROFILES
+PRODUCTION_LAYOUT_MANAGE_PROFILES = PRODUCTION_IMPORT_PROFILES
+COST_VIEW_PROFILES = {PROFILE_ADMIN, PROFILE_EXECUTIVE, PROFILE_FINANCIAL, PROFILE_AUDIT, PROFILE_CONTRACTS, PROFILE_READ_ONLY}
+COST_MANAGE_PROFILES = {PROFILE_ADMIN, PROFILE_EXECUTIVE, PROFILE_FINANCIAL}
 
 
 app = FastAPI(title="Contracts Intelligence")
@@ -111,6 +129,14 @@ templates.env.globals["ANALYSIS_VIEW_PROFILES"] = ANALYSIS_VIEW_PROFILES
 templates.env.globals["ANALYSIS_WRITE_PROFILES"] = ANALYSIS_WRITE_PROFILES
 templates.env.globals["FINANCIAL_PROFILES"] = FINANCIAL_PROFILES
 templates.env.globals["APPLY_APPROVED_EXTRACTION_PROFILES"] = APPLY_APPROVED_EXTRACTION_PROFILES
+templates.env.globals["COMMERCIAL_BI_VIEW_PROFILES"] = COMMERCIAL_BI_VIEW_PROFILES
+templates.env.globals["COMMERCIAL_BI_EXPORT_PROFILES"] = COMMERCIAL_BI_EXPORT_PROFILES
+templates.env.globals["PRODUCTION_VIEW_PROFILES"] = PRODUCTION_VIEW_PROFILES
+templates.env.globals["PRODUCTION_IMPORT_PROFILES"] = PRODUCTION_IMPORT_PROFILES
+templates.env.globals["PRODUCTION_LAYOUT_VIEW_PROFILES"] = PRODUCTION_LAYOUT_VIEW_PROFILES
+templates.env.globals["PRODUCTION_LAYOUT_MANAGE_PROFILES"] = PRODUCTION_LAYOUT_MANAGE_PROFILES
+templates.env.globals["COST_VIEW_PROFILES"] = COST_VIEW_PROFILES
+templates.env.globals["COST_MANAGE_PROFILES"] = COST_MANAGE_PROFILES
 templates.env.globals["ENABLE_SELF_REGISTRATION"] = ENABLE_SELF_REGISTRATION
 SUPPORTED_CONTRACT_EXTENSIONS = {".pdf", ".docx", ".txt"}
 DEFAULT_OPERATOR_NAMES = []
@@ -2897,6 +2923,8 @@ def contract_terms_manage(request: Request, contract_id: int, simulation_message
 
 @app.get("/contracts/{contract_id:int}/terms/versions")
 def contract_terms_versions_alias(request: Request, contract_id: int):
+    if redirect := require_login(request):
+        return redirect
     return RedirectResponse(f"/contracts/{contract_id}/terms", status_code=303)
 
 
@@ -3032,6 +3060,10 @@ def contract_terms_simulation_new(request: Request, contract_id: int):
                 "user": request.session.get("user"),
                 "contract": contract,
                 "row_count": 8,
+                "base_version": db.query(func.max(ContractTerm.version)).filter(
+                    ContractTerm.contract_id == contract.id,
+                    ContractTerm.is_current.is_(True),
+                ).scalar(),
             },
         )
     finally:
@@ -3074,6 +3106,7 @@ async def contract_terms_simulation_create(request: Request, contract_id: int):
             terms=rows,
             notes=str(form.get("notes", "")).strip() or None,
             created_by=current_username(request),
+            base_version=parse_optional_int(str(form.get("base_version", "")).strip()),
         )
     except ValueError:
         return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/new?simulation_message=erro", status_code=303)
@@ -3171,7 +3204,7 @@ def contract_terms_simulation_approve(request: Request, contract_id: int, simula
     from .services.contract_terms_simulation_service import approve_simulation
 
     try:
-        simulation, events = approve_simulation(simulation_id, reviewed_by=current_username(request))
+        simulation, events = approve_simulation(simulation_id, reviewed_by=current_username(request), contract_id=contract_id)
     except ValueError:
         return RedirectResponse(f"/contracts/{contract_id}/terms/simulations/{simulation_id}?simulation_message=erro", status_code=303)
     db = SessionLocal()
@@ -3190,7 +3223,7 @@ def contract_terms_simulation_cancel(request: Request, contract_id: int, simulat
     from .services.contract_terms_simulation_service import cancel_simulation
 
     try:
-        simulation, events = cancel_simulation(simulation_id, reviewed_by=current_username(request))
+        simulation, events = cancel_simulation(simulation_id, reviewed_by=current_username(request), contract_id=contract_id)
     except ValueError:
         db = SessionLocal()
         try:
@@ -3259,7 +3292,7 @@ def contract_terms_simulation_apply(request: Request, contract_id: int, simulati
         db.close()
 
     try:
-        simulation, events = apply_simulation_to_contract_terms(simulation_id, applied_by=current_username(request))
+        simulation, events = apply_simulation_to_contract_terms(simulation_id, applied_by=current_username(request), contract_id=contract_id)
     except ValueError:
         db = SessionLocal()
         try:
@@ -3434,6 +3467,551 @@ async def reference_table_item_create(request: Request, reference_table_id: int)
     except SQLAlchemyError:
         db.rollback()
         return JSONResponse({"error": "Nao foi possivel criar o item de referencia."}, status_code=500)
+    finally:
+        db.close()
+
+
+def production_records_query(db, *, competence: str | None = None, operator_id: int | None = None, contract_id: int | None = None, category: str | None = None, validation_status: str | None = None):
+    query = db.query(ProductionRecord)
+    competence_date = parse_optional_date(f"{competence}-01") if competence and len(competence) == 7 else None
+    if competence_date:
+        query = query.filter(ProductionRecord.competence_month == competence_date)
+    if operator_id:
+        query = query.filter(ProductionRecord.operator_id == operator_id)
+    if contract_id:
+        query = query.filter(ProductionRecord.contract_id == contract_id)
+    if category:
+        query = query.filter(ProductionRecord.category == category)
+    if validation_status:
+        query = query.filter(ProductionRecord.validation_status == validation_status)
+    return query
+
+
+def cost_rule_values(form, created_by=None):
+    from decimal import Decimal, InvalidOperation
+    def decimal_value(name):
+        raw=str(form.get(name,"")).strip().replace(".","").replace(",",".")
+        if not raw:return None
+        try:return Decimal(raw)
+        except InvalidOperation:raise ValueError(f"{name} inválido.")
+    return {"cost_center_id":parse_optional_int(str(form.get("cost_center_id",""))),"name":str(form.get("name","")).strip(),"category":str(form.get("category","")).strip() or None,"item":str(form.get("item","")).strip() or None,"allocation_method":str(form.get("allocation_method","")).strip(),"percentage":decimal_value("percentage"),"fixed_value":decimal_value("fixed_value"),"valid_from":parse_optional_date(str(form.get("valid_from",""))),"valid_until":parse_optional_date(str(form.get("valid_until",""))),"status":str(form.get("status","ativo")),"created_by":created_by,"notes":str(form.get("notes","")).strip() or None}
+
+
+@app.get("/cost-centers",response_class=HTMLResponse)
+def cost_centers_page(request:Request):
+    if redirect:=require_profiles(request,COST_VIEW_PROFILES,"Seu perfil não permite visualizar centros de custo."):return redirect
+    db=SessionLocal()
+    try:return templates.TemplateResponse(request,"cost_centers.html",{"title":"Centros de Custo","active_page":"production","user":request.session.get("user"),"centers":db.query(CostCenter).order_by(CostCenter.name).all()})
+    finally:db.close()
+@app.get("/cost-centers/new",response_class=HTMLResponse)
+def cost_center_new(request:Request):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite criar centros de custo."):return redirect
+    return templates.TemplateResponse(request,"cost_center_form.html",{"title":"Novo Centro de Custo","active_page":"production","user":request.session.get("user"),"center":None})
+@app.post("/cost-centers")
+async def cost_center_create(request:Request):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite criar centros de custo."):return redirect
+    from .services.cost_allocation_service import create_cost_center
+    form=await request.form()
+    try:center=create_cost_center(name=form.get("name",""),code=form.get("code",""),status=form.get("status","ativo"),notes=form.get("notes") or None,created_by=current_username(request))
+    except ValueError as exc:return JSONResponse({"error":str(exc)},status_code=400)
+    db=SessionLocal()
+    try:record_audit_log(db,request,"cost_center_created",entity_type="cost_center",entity_id=center.id,details=center.code);db.commit()
+    finally:db.close()
+    return RedirectResponse(f"/cost-centers/{center.id}",status_code=303)
+@app.get("/cost-centers/{center_id:int}",response_class=HTMLResponse)
+def cost_center_detail(request:Request,center_id:int):
+    if redirect:=require_profiles(request,COST_VIEW_PROFILES,"Seu perfil não permite visualizar centros de custo."):return redirect
+    db=SessionLocal()
+    try:
+        center=db.get(CostCenter,center_id)
+        if not center:return RedirectResponse("/cost-centers",status_code=303)
+        return templates.TemplateResponse(request,"cost_center_detail.html",{"title":center.name,"active_page":"production","user":request.session.get("user"),"center":center})
+    finally:db.close()
+@app.get("/cost-centers/{center_id:int}/edit",response_class=HTMLResponse)
+def cost_center_edit(request:Request,center_id:int):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite editar centros de custo."):return redirect
+    db=SessionLocal()
+    try:
+        center=db.get(CostCenter,center_id)
+        if not center:return RedirectResponse("/cost-centers",status_code=303)
+        return templates.TemplateResponse(request,"cost_center_form.html",{"title":"Editar Centro de Custo","active_page":"production","user":request.session.get("user"),"center":center})
+    finally:db.close()
+@app.post("/cost-centers/{center_id:int}/edit")
+async def cost_center_update(request:Request,center_id:int):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite editar centros de custo."):return redirect
+    from .services.cost_allocation_service import update_cost_center
+    form=await request.form()
+    try:center=update_cost_center(center_id,name=str(form.get("name","")),code=str(form.get("code","")),status=str(form.get("status","ativo")),notes=str(form.get("notes","")) or None)
+    except ValueError as exc:return JSONResponse({"error":str(exc)},status_code=400)
+    db=SessionLocal()
+    try:record_audit_log(db,request,"cost_center_updated",entity_type="cost_center",entity_id=center.id,details=center.code);db.commit()
+    finally:db.close()
+    return RedirectResponse(f"/cost-centers/{center.id}",status_code=303)
+
+@app.get("/cost-allocation-rules",response_class=HTMLResponse)
+def cost_rules_page(request:Request):
+    if redirect:=require_profiles(request,COST_VIEW_PROFILES,"Seu perfil não permite visualizar regras de rateio."):return redirect
+    db=SessionLocal()
+    try:return templates.TemplateResponse(request,"cost_allocation_rules.html",{"title":"Regras de Rateio","active_page":"production","user":request.session.get("user"),"rules":db.query(CostAllocationRule).order_by(CostAllocationRule.name).all()})
+    finally:db.close()
+@app.get("/cost-allocation-rules/new",response_class=HTMLResponse)
+def cost_rule_new(request:Request):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite criar regras."):return redirect
+    db=SessionLocal()
+    try:return templates.TemplateResponse(request,"cost_allocation_rule_form.html",{"title":"Nova Regra","active_page":"production","user":request.session.get("user"),"rule":None,"centers":db.query(CostCenter).filter(CostCenter.status=="ativo").all()})
+    finally:db.close()
+@app.post("/cost-allocation-rules")
+async def cost_rule_create(request:Request):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite criar regras."):return redirect
+    from .services.cost_allocation_service import create_allocation_rule
+    form=await request.form()
+    try:rule=create_allocation_rule(**cost_rule_values(form,current_username(request)))
+    except ValueError as exc:return JSONResponse({"error":str(exc)},status_code=400)
+    db=SessionLocal()
+    try:record_audit_log(db,request,"cost_allocation_rule_created",entity_type="cost_allocation_rule",entity_id=rule.id,details=rule.name);db.commit()
+    finally:db.close()
+    return RedirectResponse("/cost-allocation-rules",status_code=303)
+@app.get("/cost-allocation-rules/{rule_id:int}/edit",response_class=HTMLResponse)
+def cost_rule_edit(request:Request,rule_id:int):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite editar regras."):return redirect
+    db=SessionLocal()
+    try:
+        rule=db.get(CostAllocationRule,rule_id)
+        if not rule:return RedirectResponse("/cost-allocation-rules",status_code=303)
+        return templates.TemplateResponse(request,"cost_allocation_rule_form.html",{"title":"Editar Regra","active_page":"production","user":request.session.get("user"),"rule":rule,"centers":db.query(CostCenter).all()})
+    finally:db.close()
+@app.post("/cost-allocation-rules/{rule_id:int}/edit")
+async def cost_rule_update(request:Request,rule_id:int):
+    if redirect:=require_profiles(request,COST_MANAGE_PROFILES,"Seu perfil não permite editar regras."):return redirect
+    from .services.cost_allocation_service import update_allocation_rule
+    form=await request.form();values=cost_rule_values(form);values.pop("created_by",None)
+    try:rule=update_allocation_rule(rule_id,**values)
+    except ValueError as exc:return JSONResponse({"error":str(exc)},status_code=400)
+    db=SessionLocal()
+    try:record_audit_log(db,request,"cost_allocation_rule_updated",entity_type="cost_allocation_rule",entity_id=rule.id,details=rule.name);db.commit()
+    finally:db.close()
+    return RedirectResponse("/cost-allocation-rules",status_code=303)
+
+
+@app.get("/production/imports", response_class=HTMLResponse)
+def production_imports_page(request: Request):
+    if redirect := require_profiles(request, PRODUCTION_VIEW_PROFILES, "Seu perfil não permite acessar importações de produção."):
+        return redirect
+    db = SessionLocal()
+    try:
+        batches = db.query(ProductionImportBatch).order_by(ProductionImportBatch.imported_at.desc()).all()
+        return templates.TemplateResponse(request, "production_imports.html", {"title": "Importações de Produção", "active_page": "production", "user": request.session.get("user"), "batches": batches})
+    finally:
+        db.close()
+
+
+@app.get("/production/imports/preview", response_class=HTMLResponse)
+def production_import_preview_form(request: Request):
+    if redirect := require_profiles(request, PRODUCTION_IMPORT_PROFILES, "Seu perfil não permite testar importações."):
+        return redirect
+    db=SessionLocal()
+    try:
+        layouts=db.query(ProductionImportLayout).filter(ProductionImportLayout.status=="ativo").order_by(ProductionImportLayout.name).all()
+        return templates.TemplateResponse(request,"production_import_preview.html",{"title":"Preview de Importação","active_page":"production","user":request.session.get("user"),"layouts":layouts,"preview":None,"error":None})
+    finally: db.close()
+
+
+@app.post("/production/imports/preview", response_class=HTMLResponse)
+async def production_import_preview_run(request: Request, file: UploadFile=File(...), layout_id: int|None=Form(default=None), source_system: str=Form(default="planilha"), delimiter: str=Form(default=""), encoding: str=Form(default=""), sheet_name: str=Form(default="")):
+    if redirect := require_profiles(request, PRODUCTION_IMPORT_PROFILES, "Seu perfil não permite testar importações."):
+        return redirect
+    import tempfile
+    from .config import MAX_UPLOAD_SIZE_BYTES
+    from .services.production_import_service import build_import_preview
+    extension=Path(file.filename or "").suffix.lower();temp_path=None;preview=None;error=None
+    try:
+        if extension not in {".csv",".xlsx"}: raise ValueError("Preview aceita somente CSV ou Excel .xlsx.")
+        content=await file.read(MAX_UPLOAD_SIZE_BYTES+1)
+        if not content or len(content)>MAX_UPLOAD_SIZE_BYTES: raise ValueError("Arquivo vazio ou acima do limite permitido.")
+        handle=tempfile.NamedTemporaryFile(delete=False,suffix=extension);handle.write(content);handle.close();temp_path=Path(handle.name)
+        preview=build_import_preview(temp_path,layout_id=layout_id,delimiter=delimiter or None,encoding=encoding or None,sheet_name=sheet_name or None,limit=50)
+        db=SessionLocal()
+        try: record_audit_log(db,request,"production_import_preview_executed",entity_type="production_import_layout",entity_id=layout_id,details=f"{preview['analyzed_rows']} linha(s); compatível={preview['compatible']}.");db.commit()
+        finally: db.close()
+    except Exception as exc:
+        error=str(exc)
+        db=SessionLocal()
+        try: record_audit_log(db,request,"production_import_preview_error",entity_type="production_import_layout",entity_id=layout_id,success=False,details="Falha ao analisar arquivo no preview.");db.commit()
+        finally: db.close()
+    finally:
+        if temp_path: temp_path.unlink(missing_ok=True)
+    db=SessionLocal()
+    try:
+        layouts=db.query(ProductionImportLayout).filter(ProductionImportLayout.status=="ativo").order_by(ProductionImportLayout.name).all()
+        return templates.TemplateResponse(request,"production_import_preview.html",{"title":"Preview de Importação","active_page":"production","user":request.session.get("user"),"layouts":layouts,"preview":preview,"error":error,"selected_layout_id":layout_id,"source_system":source_system,"delimiter":delimiter,"encoding":encoding,"sheet_name":sheet_name})
+    finally: db.close()
+
+
+def production_layout_mappings_from_form(form) -> list[dict]:
+    from .services.production_layout_service import TARGET_FIELDS
+    return [{"target_field": field, "source_column": str(form.get(f"source_{field}", "")).strip(), "required": field in set(TARGET_FIELDS[:13]), "default_value": str(form.get(f"default_{field}", "")).strip() or None, "transform_rule": str(form.get(f"transform_{field}", "")).strip() or None} for field in TARGET_FIELDS]
+
+
+@app.get("/production/layouts", response_class=HTMLResponse)
+def production_layouts_page(request: Request):
+    if redirect := require_profiles(request, PRODUCTION_LAYOUT_VIEW_PROFILES, "Seu perfil não permite visualizar layouts de importação."):
+        return redirect
+    db = SessionLocal()
+    try:
+        layouts = db.query(ProductionImportLayout).order_by(ProductionImportLayout.name).all()
+        return templates.TemplateResponse(request, "production_layouts.html", {"title": "Layouts de Importação", "active_page": "production", "user": request.session.get("user"), "layouts": layouts})
+    finally: db.close()
+
+
+@app.get("/production/layouts/new", response_class=HTMLResponse)
+def production_layout_new(request: Request):
+    if redirect := require_profiles(request, PRODUCTION_LAYOUT_MANAGE_PROFILES, "Seu perfil não permite criar layouts."):
+        return redirect
+    from .services.production_layout_service import TARGET_FIELDS
+    return templates.TemplateResponse(request, "production_layout_form.html", {"title": "Novo Layout", "active_page": "production", "user": request.session.get("user"), "layout": None, "mapping_by_target": {}, "target_fields": TARGET_FIELDS})
+
+
+@app.post("/production/layouts")
+async def production_layout_create(request: Request):
+    if redirect := require_profiles(request, PRODUCTION_LAYOUT_MANAGE_PROFILES, "Seu perfil não permite criar layouts."):
+        return redirect
+    from .services.production_layout_service import create_layout
+    form = await request.form()
+    try:
+        layout = create_layout(name=str(form.get("name", "")), source_system=str(form.get("source_system", "planilha")), source_type=str(form.get("source_type", "csv")), delimiter=str(form.get("delimiter", "")).replace("\\t", "\t") or None, encoding=str(form.get("encoding", "")).strip() or None, has_header=bool(form.get("has_header")), status=str(form.get("status", "rascunho")), mappings=production_layout_mappings_from_form(form), created_by=current_username(request), notes=str(form.get("notes", "")).strip() or None)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    db = SessionLocal()
+    try:
+        record_audit_log(db, request, "production_import_layout_created", entity_type="production_import_layout", entity_id=layout.id, details=layout.name); db.commit()
+    finally: db.close()
+    return RedirectResponse(f"/production/layouts/{layout.id}", status_code=303)
+
+
+@app.get("/production/layouts/{layout_id:int}", response_class=HTMLResponse)
+def production_layout_detail(request: Request, layout_id: int):
+    if redirect := require_profiles(request, PRODUCTION_LAYOUT_VIEW_PROFILES, "Seu perfil não permite visualizar layouts."):
+        return redirect
+    from .services.production_layout_service import validate_layout
+    db = SessionLocal()
+    try:
+        layout = db.query(ProductionImportLayout).filter(ProductionImportLayout.id == layout_id).first()
+        if not layout: return RedirectResponse("/production/layouts", status_code=303)
+        return templates.TemplateResponse(request, "production_layout_detail.html", {"title": layout.name, "active_page": "production", "user": request.session.get("user"), "layout": layout, "validation": validate_layout(layout)})
+    finally: db.close()
+
+
+@app.get("/production/layouts/{layout_id:int}/edit", response_class=HTMLResponse)
+def production_layout_edit(request: Request, layout_id: int):
+    if redirect := require_profiles(request, PRODUCTION_LAYOUT_MANAGE_PROFILES, "Seu perfil não permite editar layouts."):
+        return redirect
+    from .services.production_layout_service import TARGET_FIELDS
+    db = SessionLocal()
+    try:
+        layout = db.query(ProductionImportLayout).filter(ProductionImportLayout.id == layout_id).first()
+        if not layout: return RedirectResponse("/production/layouts", status_code=303)
+        return templates.TemplateResponse(request, "production_layout_form.html", {"title": "Editar Layout", "active_page": "production", "user": request.session.get("user"), "layout": layout, "mapping_by_target": {row.target_field: row for row in layout.mappings}, "target_fields": TARGET_FIELDS})
+    finally: db.close()
+
+
+@app.post("/production/layouts/{layout_id:int}/edit")
+async def production_layout_update(request: Request, layout_id: int):
+    if redirect := require_profiles(request, PRODUCTION_LAYOUT_MANAGE_PROFILES, "Seu perfil não permite editar layouts."):
+        return redirect
+    from .services.production_layout_service import update_layout
+    form = await request.form()
+    try:
+        layout = update_layout(layout_id, name=str(form.get("name", "")).strip(), source_system=str(form.get("source_system", "planilha")), source_type=str(form.get("source_type", "csv")), delimiter=str(form.get("delimiter", "")).replace("\\t", "\t") or None, encoding=str(form.get("encoding", "")).strip() or None, has_header=bool(form.get("has_header")), status=str(form.get("status", "rascunho")), notes=str(form.get("notes", "")).strip() or None, mappings=production_layout_mappings_from_form(form))
+    except ValueError as exc: return JSONResponse({"error": str(exc)}, status_code=400)
+    db = SessionLocal()
+    try:
+        action = "production_import_layout_status_changed" if layout.status in {"ativo", "inativo"} else "production_import_layout_updated"
+        record_audit_log(db, request, action, entity_type="production_import_layout", entity_id=layout.id, details=layout.name); db.commit()
+    finally: db.close()
+    return RedirectResponse(f"/production/layouts/{layout.id}", status_code=303)
+
+
+@app.get("/production/imports/new", response_class=HTMLResponse)
+def production_import_new(request: Request):
+    if redirect := require_profiles(request, PRODUCTION_IMPORT_PROFILES, "Seu perfil não permite importar produção."):
+        return redirect
+    db = SessionLocal()
+    try:
+        layouts = db.query(ProductionImportLayout).filter(ProductionImportLayout.status == "ativo").order_by(ProductionImportLayout.name).all()
+        return templates.TemplateResponse(request, "production_import_form.html", {"title": "Nova Importação de Produção", "active_page": "production", "user": request.session.get("user"), "layouts": layouts})
+    finally: db.close()
+
+
+@app.post("/production/imports")
+async def production_import_create(request: Request, file: UploadFile = File(...), batch_name: str = Form(...), source_system: str = Form(default="planilha"), layout_id: int | None = Form(default=None), notes: str = Form(default="")):
+    if redirect := require_profiles(request, PRODUCTION_IMPORT_PROFILES, "Seu perfil não permite importar produção."):
+        return redirect
+    from .services.production_import_service import create_import_batch, import_file_to_batch
+    from .services.uploads import UnsupportedUploadError, save_upload_file
+
+    original_filename = Path(file.filename or "producao.csv").name
+    extension = Path(original_filename).suffix.lower()
+    if extension not in {".csv", ".xlsx"}:
+        return JSONResponse({"error": "Envie CSV ou Excel .xlsx; .xls legado não é suportado."}, status_code=400)
+    db = SessionLocal()
+    try:
+        layout = db.query(ProductionImportLayout).filter(ProductionImportLayout.id == layout_id, ProductionImportLayout.status == "ativo").first() if layout_id else None
+        if layout_id and not layout: return JSONResponse({"error": "Layout ativo não encontrado."}, status_code=400)
+        if layout and ((extension == ".xlsx") != (layout.source_type == "excel")): return JSONResponse({"error": "Tipo do arquivo não corresponde ao layout selecionado."}, status_code=400)
+        if layout: source_system = layout.source_system
+    finally: db.close()
+    stored_path = None
+    try:
+        stored_path, _ = await save_upload_file(file, extension)
+        batch, created_events = create_import_batch(batch_name=batch_name, source_type="excel" if extension == ".xlsx" else "csv", source_system=source_system, original_filename=original_filename, file_path=str(stored_path), imported_by=current_username(request), notes=notes.strip() or None, layout_id=layout_id)
+        batch, processing_events = import_file_to_batch(batch.id, stored_path)
+        events = [*created_events, *processing_events]
+    except (ValueError, UnsupportedUploadError) as exc:
+        db = SessionLocal()
+        try:
+            batch_record = db.query(ProductionImportBatch).filter(ProductionImportBatch.file_path == str(stored_path)).first() if stored_path else None
+            if batch_record:
+                batch_record.import_status = "erro"
+                batch_record.error_message = str(exc)[:500]
+                record_audit_log(db, request, "production_import_batch_error", entity_type="production_import_batch", entity_id=batch_record.id, success=False, details="Falha de validação do arquivo de produção.")
+                if extension == ".xlsx":
+                    record_audit_log(db, request, "production_excel_import_error", entity_type="production_import_batch", entity_id=batch_record.id, success=False, details="Falha ao ler ou mapear arquivo Excel.")
+                if layout_id:
+                    record_audit_log(db, request, "production_import_layout_error", entity_type="production_import_layout", entity_id=layout_id, success=False, details=f"Falha de layout no lote #{batch_record.id}.")
+                db.commit()
+                return RedirectResponse(f"/production/imports/{batch_record.id}", status_code=303)
+        finally:
+            db.close()
+        if stored_path:
+            stored_path.unlink(missing_ok=True)
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/production/imports/{batch.id}", status_code=303)
+
+
+@app.get("/production/imports/{batch_id:int}", response_class=HTMLResponse)
+def production_import_detail(request: Request, batch_id: int):
+    if redirect := require_profiles(request, PRODUCTION_VIEW_PROFILES, "Seu perfil não permite acessar importações de produção."):
+        return redirect
+    from .services.production_import_service import build_import_summary
+    db = SessionLocal()
+    try:
+        batch = db.query(ProductionImportBatch).filter(ProductionImportBatch.id == batch_id).first()
+        if not batch:
+            return RedirectResponse("/production/imports", status_code=303)
+        records = db.query(ProductionRecord).filter(ProductionRecord.batch_id == batch.id).order_by(ProductionRecord.source_row_number).limit(500).all()
+        return templates.TemplateResponse(request, "production_import_detail.html", {"title": "Detalhe da Importação", "active_page": "production", "user": request.session.get("user"), "batch": batch, "records": records, "summary": build_import_summary(db, batch.id)})
+    finally:
+        db.close()
+
+
+@app.post("/production/imports/{batch_id:int}/cancel")
+def production_import_cancel(request: Request, batch_id: int):
+    if redirect := require_profiles(request, PRODUCTION_IMPORT_PROFILES, "Seu perfil não permite cancelar importações."):
+        return redirect
+    from .services.production_import_service import cancel_import_batch
+    try:
+        batch, events = cancel_import_batch(batch_id, cancelled_by=current_username(request))
+    except ValueError:
+        return RedirectResponse(f"/production/imports/{batch_id}?cancel_message=bloqueado", status_code=303)
+    db = SessionLocal()
+    try:
+        record_service_audit_events(db, request, events)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(f"/production/imports/{batch.id}", status_code=303)
+
+
+@app.get("/production/records", response_class=HTMLResponse)
+def production_records_page(request: Request, competence: str | None = None, operator_id: int | None = None, contract_id: int | None = None, category: str | None = None, validation_status: str | None = None):
+    if redirect := require_profiles(request, PRODUCTION_VIEW_PROFILES, "Seu perfil não permite acessar produção consolidada."):
+        return redirect
+    from .services.financial_impact_service import calculate_margin_estimate
+    db = SessionLocal()
+    try:
+        filtered_query = production_records_query(db, competence=competence, operator_id=operator_id, contract_id=contract_id, category=category, validation_status=validation_status)
+        aggregate = filtered_query.with_entities(
+            func.count(ProductionRecord.id),
+            func.coalesce(func.sum(ProductionRecord.billed_value), 0),
+            func.coalesce(func.sum(ProductionRecord.paid_value), 0),
+            func.coalesce(func.sum(ProductionRecord.denied_value), 0),
+            func.coalesce(func.sum(ProductionRecord.cost_value), 0),
+            func.count(ProductionRecord.cost_value),
+        ).one()
+        records = filtered_query.order_by(ProductionRecord.service_date.desc(), ProductionRecord.id.desc()).limit(1000).all()
+        totals = {"count": aggregate[0], "billed": aggregate[1], "paid": aggregate[2], "denied": aggregate[3], "cost": aggregate[4], "records_with_cost": aggregate[5]}
+        margin = calculate_margin_estimate(db, contract_id=contract_id, operator_id=operator_id) if contract_id or operator_id else {"status": "filtro_necessario", "message": "Selecione contrato ou operadora para avaliar completude de custo.", "margin_estimate": None}
+        record_audit_log(db, request, "production_records_viewed", entity_type="production_records", details=f"{aggregate[0]} registro(s) filtrado(s).")
+        db.commit()
+        return templates.TemplateResponse(request, "production_records.html", {"title": "Produção Consolidada", "active_page": "production", "user": request.session.get("user"), "records": records, "totals": totals, "margin": margin, "active_allocation_rules": db.query(CostAllocationRule).filter(CostAllocationRule.status=="ativo").count(), "operators": db.query(Operator).filter(Operator.is_active.is_(True)).order_by(Operator.name).all(), "contracts": db.query(Contract).filter(Contract.status == "active").order_by(Contract.contract_name).all(), "categories": [row[0] for row in db.query(ProductionRecord.category).filter(ProductionRecord.category.isnot(None)).distinct().order_by(ProductionRecord.category).all()], "filters": {"competence": competence, "operator_id": operator_id, "contract_id": contract_id, "category": category, "validation_status": validation_status}})
+    finally:
+        db.close()
+
+
+@app.get("/production/records/export")
+def production_records_export(request: Request, competence: str | None = None, operator_id: int | None = None, contract_id: int | None = None, category: str | None = None, validation_status: str | None = None):
+    if redirect := require_profiles(request, PRODUCTION_VIEW_PROFILES, "Seu perfil não permite exportar produção."):
+        return redirect
+    db = SessionLocal()
+    try:
+        records = production_records_query(db, competence=competence, operator_id=operator_id, contract_id=contract_id, category=category, validation_status=validation_status).order_by(ProductionRecord.id).all()
+        rows = [["Competencia", "Operadora", "Contrato", "Categoria", "Item", "Quantidade", "Unidade", "Valor faturado", "Valor pago", "Valor glosado", "Custo", "Status"]]
+        rows.extend([[record.competence_month, record.operator.name if record.operator else "", record.contract.contract_name if record.contract else "", record.category or "", record.item or "", record.quantity or "", record.unit or "", record.billed_value or "", record.paid_value or "", record.denied_value or "", record.cost_value if record.cost_value is not None else "", record.validation_status] for record in records])
+        record_audit_log(db, request, "production_records_exported", entity_type="production_records", details=f"{len(records)} registro(s).")
+        db.commit()
+        return commercial_csv_response(rows, "producao_consolidada.csv")
+    finally:
+        db.close()
+
+
+@app.get("/production/records/{record_id:int}/cost-estimate",response_class=HTMLResponse)
+def production_record_cost_estimate(request:Request,record_id:int):
+    if redirect:=require_profiles(request,COST_VIEW_PROFILES,"Seu perfil não permite consultar estimativas de custo."):return redirect
+    from .services.cost_allocation_service import estimate_indirect_cost_for_record
+    db=SessionLocal()
+    try:
+        record=db.get(ProductionRecord,record_id)
+        if not record:return RedirectResponse("/production/records",status_code=303)
+        estimate=estimate_indirect_cost_for_record(db,record)
+        record_audit_log(db,request,"indirect_cost_estimate_viewed",entity_type="production_record",entity_id=record.id,details=f"{len(estimate['rules'])} regra(s) aplicável(is).");db.commit()
+        return templates.TemplateResponse(request,"production_cost_estimate.html",{"title":"Estimativa de Custo Indireto","active_page":"production","user":request.session.get("user"),"record":record,"estimate":estimate})
+    finally:db.close()
+
+
+def parse_commercial_contract_ids(raw: str | None) -> list[int]:
+    values = []
+    for item in (raw or "").split(","):
+        try:
+            value = int(item.strip())
+        except ValueError:
+            continue
+        if value > 0 and value not in values:
+            values.append(value)
+    return values[:10]
+
+
+def commercial_csv_response(rows: list[list], filename: str) -> Response:
+    import csv
+    from io import StringIO
+
+    output = StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerows(rows)
+    return Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.get("/bi/commercial", response_class=HTMLResponse)
+def commercial_bi_dashboard(request: Request):
+    if redirect := require_profiles(request, COMMERCIAL_BI_VIEW_PROFILES, "Seu perfil não permite visualizar o BI Comercial."):
+        return redirect
+    from .services.commercial_bi_service import build_bi_alerts, get_commercial_dashboard_summary, get_conditions_by_category, rank_operators_by_contract_values
+
+    db = SessionLocal()
+    try:
+        summary = get_commercial_dashboard_summary(db)
+        ranking = rank_operators_by_contract_values(db)
+        conditions = get_conditions_by_category(db)
+        alerts = build_bi_alerts(db)
+        record_audit_log(db, request, "commercial_bi_viewed", entity_type="commercial_bi", details=f"{len(ranking)} operadora(s); {len(alerts)} alerta(s).")
+        db.commit()
+        return templates.TemplateResponse(request, "commercial_bi.html", {"title": "BI Comercial", "active_page": "commercial_bi", "user": request.session.get("user"), "summary": summary, "ranking": ranking[:10], "conditions": conditions, "alerts": alerts[:30]})
+    finally:
+        db.close()
+
+
+@app.get("/bi/commercial/operators", response_class=HTMLResponse)
+def commercial_bi_operators(request: Request):
+    if redirect := require_profiles(request, COMMERCIAL_BI_VIEW_PROFILES, "Seu perfil não permite visualizar o ranking comercial."):
+        return redirect
+    from .services.commercial_bi_service import rank_operators_by_contract_values
+
+    db = SessionLocal()
+    try:
+        ranking = rank_operators_by_contract_values(db)
+        return templates.TemplateResponse(request, "commercial_bi_operators.html", {"title": "Ranking de Operadoras", "active_page": "commercial_bi", "user": request.session.get("user"), "ranking": ranking})
+    finally:
+        db.close()
+
+
+@app.get("/bi/commercial/compare", response_class=HTMLResponse)
+def commercial_bi_compare(request: Request, contract_ids: str | None = None):
+    if redirect := require_profiles(request, COMMERCIAL_BI_VIEW_PROFILES, "Seu perfil não permite gerar comparativos comerciais."):
+        return redirect
+    from .services.commercial_bi_service import compare_contracts_executive
+
+    selected_ids = parse_commercial_contract_ids(contract_ids)
+    db = SessionLocal()
+    try:
+        comparison = compare_contracts_executive(db, selected_ids)
+        contracts = db.query(Contract).filter(Contract.status == "active").order_by(Contract.contract_name).all()
+        if selected_ids:
+            record_audit_log(db, request, "commercial_bi_comparison_generated", entity_type="commercial_bi", details=f"Contratos: {','.join(map(str, selected_ids))}; {len(comparison['rows'])} item(ns).")
+            db.commit()
+        return templates.TemplateResponse(request, "commercial_bi_compare.html", {"title": "Comparativo Executivo", "active_page": "commercial_bi", "user": request.session.get("user"), "contracts": contracts, "selected_ids": selected_ids, "comparison": comparison})
+    finally:
+        db.close()
+
+
+@app.get("/bi/commercial/export/ranking")
+def commercial_bi_export_ranking(request: Request):
+    if redirect := require_profiles(request, COMMERCIAL_BI_EXPORT_PROFILES, "Seu perfil não permite exportar o ranking comercial."):
+        return redirect
+    from .services.commercial_bi_service import rank_operators_by_contract_values
+
+    db = SessionLocal()
+    try:
+        ranking = rank_operators_by_contract_values(db)
+        rows = [["Posicao", "Operadora", "Score Comercial", "Contratos ativos", "Contratos com tabela", "Itens vigentes"]]
+        rows.extend([[row["position"], row["operator"].name, row["score"], row["contract_count"], row["contracts_with_terms"], row["item_count"]] for row in ranking])
+        record_audit_log(db, request, "commercial_bi_ranking_exported", entity_type="commercial_bi", details=f"{len(ranking)} operadora(s).")
+        db.commit()
+        return commercial_csv_response(rows, "bi_comercial_ranking_operadoras.csv")
+    finally:
+        db.close()
+
+
+@app.get("/bi/commercial/export/conditions")
+def commercial_bi_export_conditions(request: Request):
+    if redirect := require_profiles(request, COMMERCIAL_BI_EXPORT_PROFILES, "Seu perfil não permite exportar condições comerciais."):
+        return redirect
+    from .services.commercial_bi_service import get_conditions_by_category
+
+    db = SessionLocal()
+    try:
+        conditions = get_conditions_by_category(db)
+        rows = [["Categoria", "Quantidade", "Maior valor", "Operadora maior", "Contrato maior", "Menor valor", "Operadora menor", "Contrato menor", "Situacao"]]
+        for row in conditions:
+            high_contract, low_contract = row.get("highest_contract"), row.get("lowest_contract")
+            rows.append([row["category"], row["item_count"], row.get("highest").reference_value if row.get("highest") else "", high_contract.operator_name if high_contract else "", high_contract.contract_name if high_contract else "", row.get("lowest").reference_value if row.get("lowest") else "", low_contract.operator_name if low_contract else "", low_contract.contract_name if low_contract else "", row["status"]])
+        record_audit_log(db, request, "commercial_bi_conditions_exported", entity_type="commercial_bi", details=f"{len(conditions)} categoria(s).")
+        db.commit()
+        return commercial_csv_response(rows, "bi_comercial_melhores_piores_condicoes.csv")
+    finally:
+        db.close()
+
+
+@app.get("/bi/commercial/compare/export")
+def commercial_bi_compare_export(request: Request, contract_ids: str | None = None):
+    if redirect := require_profiles(request, COMMERCIAL_BI_EXPORT_PROFILES, "Seu perfil não permite exportar comparativos comerciais."):
+        return redirect
+    from .services.commercial_bi_service import compare_contracts_executive
+
+    selected_ids = parse_commercial_contract_ids(contract_ids)
+    db = SessionLocal()
+    try:
+        comparison = compare_contracts_executive(db, selected_ids)
+        rows = [["Categoria", "Item", "Unidade", *[contract.contract_name for contract in comparison["contracts"]], "Maior valor", "Menor valor"]]
+        for row in comparison["rows"]:
+            rows.append([row["category"], row["item"], row["unit"] or "", *[row["values"].get(contract.id, "") for contract in comparison["contracts"]], row["highest"] or "", row["lowest"] or ""])
+        record_audit_log(db, request, "commercial_bi_comparison_exported", entity_type="commercial_bi", details=f"{len(comparison['contracts'])} contrato(s); {len(comparison['rows'])} item(ns).")
+        db.commit()
+        return commercial_csv_response(rows, "bi_comercial_comparativo_executivo.csv")
     finally:
         db.close()
 

@@ -35,6 +35,16 @@
                 <a class="nav-item {% if active_page == 'operators' %}active{% endif %}" href="/operators"><span>O</span>Operadoras</a>
                 <a class="nav-item {% if active_page == 'contract_terms' %}active{% endif %}" href="/contract-terms"><span>T</span>Condições Contratuais</a>
                 <a class="nav-item {% if active_page == 'reference_tables' %}active{% endif %}" href="/reference-tables"><span>R</span>Tabelas de Referencia</a>
+                {% if has_profile(user, COMMERCIAL_BI_VIEW_PROFILES) %}
+                <a class="nav-item {% if active_page == 'commercial_bi' %}active{% endif %}" href="/bi/commercial"><span>B</span>BI Comercial</a>
+                {% endif %}
+                {% if has_profile(user, PRODUCTION_VIEW_PROFILES) %}
+                <a class="nav-item {% if active_page == 'production' %}active{% endif %}" href="/production/records"><span>P</span>Produção e Custos</a>
+                {% endif %}
+                {% if has_profile(user, COST_VIEW_PROFILES) %}
+                <a class="nav-item" href="/cost-centers"><span>C</span>Centros de Custo</a>
+                <a class="nav-item" href="/cost-allocation-rules"><span>R</span>Regras de Rateio</a>
+                {% endif %}
                 {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
                 <a class="nav-item" href="/contracts/import"><span>U</span>Importar Contrato</a>
                 {% endif %}

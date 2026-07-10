@@ -20,3 +20,5 @@ pdf2image
 pillow
 bcrypt
 python-dateutil
+pytest>=8.0,<9.0
+openpyxl>=3.1,<4.0

@@ -37,6 +37,15 @@
         {% endif %}
     </div>
     {% if simulation.error_message %}<div class="candidate-warning-list"><div>{{ simulation.error_message }}</div></div>{% endif %}
+    {% set warnings = (simulation.comparison_summary_json or {}).get('warnings', []) %}
+    {% if warnings %}
+    <div class="candidate-warning-list margin-top">
+        <strong>Pendencias de validacao</strong>
+        {% for warning in warnings %}<div>{{ warning }}</div>{% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state inline margin-top">Nenhuma pendencia de validacao registrada.</div>
+    {% endif %}
 </section>
 
 <section class="panel">

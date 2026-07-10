@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, Numeric, Text, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, Numeric, Text, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -252,6 +252,132 @@ class ReferenceTableItem(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     reference_table: Mapped[ReferenceTable] = relationship(back_populates="items")
+
+
+class ProductionImportBatch(Base):
+    __tablename__ = "production_import_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(50), default="csv", nullable=False, index=True)
+    source_system: Mapped[str] = mapped_column(String(50), default="planilha", nullable=False, index=True)
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    import_status: Mapped[str] = mapped_column(String(50), default="pendente", nullable=False, index=True)
+    imported_by: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    total_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    valid_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    invalid_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    layout_id: Mapped[int | None] = mapped_column(ForeignKey("production_import_layouts.id", ondelete="SET NULL"), nullable=True, index=True)
+    import_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    records: Mapped[list["ProductionRecord"]] = relationship(back_populates="batch", cascade="all, delete-orphan")
+    layout: Mapped["ProductionImportLayout | None"] = relationship(back_populates="batches")
+
+
+class ProductionImportLayout(Base):
+    __tablename__ = "production_import_layouts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    source_system: Mapped[str] = mapped_column(String(50), default="planilha", nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(50), default="csv", nullable=False, index=True)
+    delimiter: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    encoding: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    has_header: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="rascunho", nullable=False, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    mappings: Mapped[list["ProductionImportLayoutMapping"]] = relationship(back_populates="layout", cascade="all, delete-orphan")
+    batches: Mapped[list[ProductionImportBatch]] = relationship(back_populates="layout")
+
+
+class ProductionImportLayoutMapping(Base):
+    __tablename__ = "production_import_layout_mappings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    layout_id: Mapped[int] = mapped_column(ForeignKey("production_import_layouts.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_field: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_column: Mapped[str] = mapped_column(String(255), nullable=False)
+    required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    default_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transform_rule: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    layout: Mapped[ProductionImportLayout] = relationship(back_populates="mappings")
+
+
+class ProductionRecord(Base):
+    __tablename__ = "production_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("production_import_batches.id", ondelete="RESTRICT"), nullable=False, index=True)
+    operator_id: Mapped[int | None] = mapped_column(ForeignKey("operators.id", ondelete="SET NULL"), nullable=True, index=True)
+    contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True)
+    patient_identifier_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    attendance_reference: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    account_reference: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    guide_reference: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    service_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    competence_month: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    item: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quantity: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    billed_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    paid_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    denied_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    cost_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    validation_status: Mapped[str] = mapped_column(String(50), default="pendente", nullable=False, index=True)
+    validation_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    batch: Mapped[ProductionImportBatch] = relationship(back_populates="records")
+    operator: Mapped[Operator | None] = relationship()
+    contract: Mapped[Contract | None] = relationship()
+
+
+class CostCenter(Base):
+    __tablename__ = "cost_centers"
+    __table_args__ = (UniqueConstraint("code", name="cost_centers_code_key"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), default="ativo", nullable=False, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    allocation_rules: Mapped[list["CostAllocationRule"]] = relationship(back_populates="cost_center", cascade="all, delete-orphan")
+
+
+class CostAllocationRule(Base):
+    __tablename__ = "cost_allocation_rules"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    cost_center_id: Mapped[int] = mapped_column(ForeignKey("cost_centers.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    item: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    allocation_method: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    percentage: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    fixed_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="ativo", nullable=False, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_center: Mapped[CostCenter] = relationship(back_populates="allocation_rules")
 
 
 class AuditLog(Base):

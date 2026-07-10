@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="topbar"><div><h1>Ranking de Operadoras</h1><p>Score Comercial baseado exclusivamente em contratos e tabelas vigentes cadastradas.</p></div><div class="topbar-actions"><a class="secondary-action" href="/bi/commercial">Voltar ao BI</a>{% if has_profile(user, COMMERCIAL_BI_EXPORT_PROFILES) %}<a class="primary-button compact" href="/bi/commercial/export/ranking">Exportar CSV</a>{% endif %}</div></header>
+<section class="panel"><div class="empty-state inline">Rentabilidade real depende de produção/volume assistencial e custos. Este ranking mede completude e comparabilidade das condições cadastradas.</div></section>
+<section class="panel"><div class="table-wrap"><table class="contracts-table"><thead><tr><th>#</th><th>Operadora</th><th>Score</th><th>Contratos ativos</th><th>Com tabela</th><th>Itens</th><th>Médias por categoria</th></tr></thead><tbody>
+{% for row in ranking %}<tr><td>{{ row.position }}</td><td><strong>{{ row.operator.name }}</strong><small>{{ row.operator.tax_id or 'CNPJ não informado' }}</small></td><td>{{ row.score }}</td><td>{{ row.contract_count }}</td><td>{{ row.contracts_with_terms }}</td><td>{{ row.item_count }}</td><td>{% for category, value in row.category_averages.items() %}<span class="status-pill active">{{ category }}: {{ value }}</span> {% else %}-{% endfor %}</td></tr>
+{% else %}<tr><td colspan="7"><div class="empty-state inline">Dados insuficientes para montar o ranking.</div></td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}
+

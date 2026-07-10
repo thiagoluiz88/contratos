@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="topbar"><div><h1>Importações de Produção</h1><p>Lotes rastreáveis de produção assistencial e custos.</p></div><div class="topbar-actions"><a class="secondary-action" href="/production/records">Produção consolidada</a><a class="secondary-action" href="/production/layouts">Layouts</a>{% if has_profile(user, PRODUCTION_IMPORT_PROFILES) %}<a class="primary-button compact" href="/production/imports/new">Nova importação</a>{% endif %}</div></header>
+<section class="panel"><div class="table-wrap"><table class="contracts-table"><thead><tr><th>Lote</th><th>Origem</th><th>Sistema</th><th>Status</th><th>Total</th><th>Válidas</th><th>Pendentes</th><th>Importado por</th><th>Data</th><th></th></tr></thead><tbody>
+{% for batch in batches %}<tr><td><strong>{{ batch.batch_name }}</strong><small>{{ batch.original_filename or '-' }}</small></td><td>{{ batch.source_type }}</td><td>{{ batch.source_system }}</td><td><span class="status-pill {{ 'active' if batch.import_status == 'processado' else 'pending' }}">{{ batch.import_status }}</span></td><td>{{ batch.total_rows }}</td><td>{{ batch.valid_rows }}</td><td>{{ batch.invalid_rows }}</td><td>{{ batch.imported_by or '-' }}</td><td>{{ batch.imported_at }}</td><td><a class="btn btn-secondary compact" href="/production/imports/{{ batch.id }}">Abrir</a></td></tr>
+{% else %}<tr><td colspan="10"><div class="empty-state inline">Nenhum lote de produção importado.</div></td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}

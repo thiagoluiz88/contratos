@@ -76,6 +76,12 @@ def money(value) -> Decimal | None:
     return Decimal(str(value))
 
 
+def comparable_date(value):
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 def calculate_value_difference(old_value, new_value) -> dict[str, Any]:
     old_decimal = money(old_value)
     new_decimal = money(new_value)
@@ -109,7 +115,7 @@ def classify_term_change(old_term: ContractTerm | dict | None, new_term: Contrac
         return CHANGE_UNIT
     if fold_text(term_field(old_term, "description") or getattr(old_term, "rule_text", None)) != fold_text(term_field(new_term, "description") or getattr(new_term, "rule_text", None)):
         return CHANGE_DESCRIPTION
-    if term_field(old_term, "valid_from") != term_field(new_term, "valid_from") or term_field(old_term, "valid_until") != term_field(new_term, "valid_until"):
+    if comparable_date(term_field(old_term, "valid_from")) != comparable_date(term_field(new_term, "valid_from")) or comparable_date(term_field(old_term, "valid_until")) != comparable_date(term_field(new_term, "valid_until")):
         return CHANGE_VALIDITY
     return CHANGE_UNCHANGED
 
