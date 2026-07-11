@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Configurações</h1>
+        <p>Parâmetros operacionais do sistema local de gestão de contratos.</p>
+    </div>
+</header>
+
+<section class="panel">
+    <div class="contract-mini-grid analysis-grid">
+        <div><span>Banco de dados</span><strong>PostgreSQL</strong></div>
+        <div><span>Autenticação</span><strong>Usuários locais com senha bcrypt</strong></div>
+        <div><span>Auditoria</span><strong>Eventos de autenticação e ações de negócio</strong></div>
+        <div><span>Análise IA</span><strong>Apoio local por regras, preparado para integração futura</strong></div>
+        <div><span>Arquivos</span><strong>Anexos em diretório local configurado por ambiente</strong></div>
+        <div><span>Perfis</span><strong>Administrador, Diretoria, Contratos, Financeiro, Auditoria e Somente leitura</strong></div>
+    </div>
+</section>
+{% endblock %}

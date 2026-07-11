@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Tabelas Contratuais</h1>
+        <p>{{ contract.contract_name }} · {{ contract.operator_name or "Operadora nao informada" }}</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="secondary-action" href="/contracts/{{ contract.id }}">Contrato</a>
+        <a class="secondary-action" href="/documents?contract_id={{ contract.id }}">Documentos</a>
+        <a class="secondary-action" href="/contracts/{{ contract.id }}/terms/simulations">Simulacoes</a>
+        <a class="secondary-action" href="/contracts/{{ contract.id }}/terms/reference-compare">Referencia</a>
+        {% if has_profile(user, APPLY_APPROVED_EXTRACTION_PROFILES) %}
+        <a class="primary-button compact" href="/contracts/{{ contract.id }}/terms/simulations/new">Nova simulacao</a>
+        {% endif %}
+    </div>
+</header>
+
+{% if simulation_message == "simulacao_aplicada" %}
+<section class="panel"><div class="empty-state inline">Simulacao aplicada como nova versao oficial. A versao anterior foi preservada no historico.</div></section>
+{% endif %}
+
+<section class="stats-grid four-inline">
+    <article class="mini-card"><span>Contrato</span><strong>{{ contract.contract_number or "-" }}</strong></article>
+    <article class="mini-card"><span>Status</span><strong>{{ contract.status }}</strong></article>
+    <article class="mini-card"><span>Versao atual</span><strong>{% if current_version %}v{{ current_version.version }}{% else %}-{% endif %}</strong></article>
+    <article class="mini-card"><span>Itens atuais</span><strong>{{ current_terms|length }}</strong></article>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <h2>Simulacoes e referencia</h2>
+            <p>Simule uma nova tabela antes de gravar contract_terms definitivos ou compare a tabela atual com uma referencia cadastrada.</p>
+        </div>
+    </div>
+    <div class="contract-mini-grid analysis-grid">
+        <div><span>Simulacoes recentes</span><strong>{{ simulations|length }}</strong></div>
+        <div><span>Referencias ativas</span><strong>{{ reference_tables|length }}</strong></div>
+        <div><span>Regra</span><strong>Simular antes de aplicar</strong></div>
+        <div><span>Impacto financeiro</span><strong>Depende de volume assistencial</strong></div>
+    </div>
+    {% if simulations %}
+    <div class="table-wrap margin-top">
+        <table class="contracts-table">
+            <thead><tr><th>Simulacao</th><th>Status</th><th>Versao simulada</th><th>Criada em</th><th></th></tr></thead>
+            <tbody>
+                {% for simulation in simulations %}
+                <tr>
+                    <td><strong>{{ simulation.simulation_name }}</strong></td>
+                    <td><span class="status-pill pending">{{ simulation.simulation_status }}</span></td>
+                    <td>v{{ simulation.simulated_version or "-" }}</td>
+                    <td>{{ simulation.created_at or "-" }}</td>
+                    <td><a class="btn btn-secondary compact" href="/contracts/{{ contract.id }}/terms/simulations/{{ simulation.id }}">Abrir</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <h2>Comparar versoes</h2>
+            <p>Selecione uma versao anterior e uma nova versao para visualizar diferencas.</p>
+        </div>
+    </div>
+    <form method="get" action="/contracts/{{ contract.id }}/terms/compare" class="form-grid three-cols">
+        <label><span>Versao anterior</span><select name="from_version" required>{% for version in versions %}<option value="{{ version.version }}">v{{ version.version }}</option>{% endfor %}</select></label>
+        <label><span>Versao nova</span><select name="to_version" required>{% for version in versions %}<option value="{{ version.version }}" {% if loop.first %}selected{% endif %}>v{{ version.version }}</option>{% endfor %}</select></label>
+        <div class="inline-actions"><button class="btn btn-primary" type="submit">Comparar versoes</button></div>
+    </form>
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Historico de versoes</h2></div></div>
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead><tr><th>Versao</th><th>Vigencia</th><th>Status</th><th>Origem</th><th>Itens</th><th>Total referencial</th><th>Criado por</th><th>Criado em</th></tr></thead>
+            <tbody>
+                {% for version in versions %}
+                <tr>
+                    <td><strong>v{{ version.version }}</strong></td>
+                    <td>{{ version.valid_from or "-" }} a {{ version.valid_until or "vigente" }}</td>
+                    <td><span class="status-pill {{ 'active' if version.is_current else 'expired' }}">{{ "Atual" if version.is_current else "Anterior" }}</span></td>
+                    <td>{% if version.source_document_id %}<a href="/documents/{{ version.source_document_id }}">Documento #{{ version.source_document_id }}</a>{% else %}-{% endif %}</td>
+                    <td>{{ version.item_count }}</td>
+                    <td>{{ "%.2f"|format(version.total_value) }}</td>
+                    <td>{{ version.created_by or "-" }}</td>
+                    <td>{{ version.created_at or "-" }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8"><div class="empty-state inline">Nenhuma versao registrada.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Tabela atual</h2></div></div>
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead><tr><th>Categoria</th><th>Item</th><th>Unidade</th><th>Valor</th><th>Vigencia</th><th>Origem</th></tr></thead>
+            <tbody>
+                {% for term in current_terms %}
+                <tr>
+                    <td>{{ term.category }}</td>
+                    <td><strong>{{ term.title }}</strong><small>{{ term.description or term.rule_text or "-" }}</small></td>
+                    <td>{{ term.unit or "-" }}</td>
+                    <td>{{ term.reference_value or "-" }}</td>
+                    <td>{{ term.valid_from or "-" }} a {{ term.valid_until or "vigente" }}</td>
+                    <td>{% if term.source_document_id %}<a href="/documents/{{ term.source_document_id }}">Documento #{{ term.source_document_id }}</a>{% else %}{{ term.source_type or "-" }}{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6"><div class="empty-state inline">Nenhum item vigente.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if additives %}
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Aditivos vinculados</h2></div></div>
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead><tr><th>Aditivo</th><th>Tipo</th><th>Assinatura</th><th>Vigencia</th><th>Indice</th></tr></thead>
+            <tbody>
+                {% for additive in additives %}
+                <tr><td>{{ additive.additive_number }}</td><td>{{ additive.additive_type or "-" }}</td><td>{{ additive.signature_date or "-" }}</td><td>{{ additive.start_date or "-" }} a {{ additive.end_date or "-" }}</td><td>{{ additive.reajust_index or "-" }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Validação humana</h1>
+        <p>Confira o documento e revise os campos estruturados antes de aprovar. Nesta etapa, os dados são manuais ou pendentes.</p>
+    </div>
+    <div class="topbar-actions">
+        <form method="post" action="/documents/{{ document.id }}/analyze">
+            <button class="primary-button compact" type="submit">Gerar candidatos a partir do texto</button>
+        </form>
+        {% if extraction.review_status == "aprovado" and extraction.apply_status != "aplicado" %}
+        <form method="post" action="/documents/{{ document.id }}/apply">
+            <button class="primary-button compact" type="submit">Aplicar ao cadastro</button>
+        </form>
+        {% endif %}
+        <a class="secondary-action" href="/documents/{{ document.id }}">Voltar</a>
+    </div>
+</header>
+
+<section class="detail-layout">
+    <aside class="detail-side side-stack">
+        <section class="panel">
+            <div class="panel-head compact"><div><h2>Documento original</h2></div></div>
+            <div class="contract-mini-grid analysis-grid">
+                <div><span>Arquivo</span><strong>{{ document.original_filename }}</strong></div>
+                <div><span>Contrato</span><strong>{{ document.contract.contract_name }}</strong></div>
+                <div><span>Tipo</span><strong>{{ document.document_type or document.file_type }}</strong></div>
+                <div><span>Status</span><strong>{{ document.processing_status }}</strong></div>
+                <div><span>Método</span><strong>{{ extraction.extraction_method or document.extraction_method or "-" }}</strong></div>
+                <div><span>Páginas</span><strong>{{ extraction.page_count if extraction.page_count is not none else "-" }}</strong></div>
+                <div><span>Caracteres</span><strong>{{ extraction.character_count }}</strong></div>
+                <div><span>Processamento</span><strong>{{ document.notes or "Preparado para IA/OCR futuro." }}</strong></div>
+            </div>
+            {% if extraction.extraction_warnings %}
+            <div class="empty-state inline">{{ extraction.extraction_warnings }}</div>
+            {% endif %}
+            {% if analysis_message == "sem_texto" %}
+            <div class="empty-state inline">Nao ha texto extraido disponivel para analise interpretativa. A revisao manual permanece disponivel.</div>
+            {% elif analysis_message == "erro" %}
+            <div class="empty-state inline">Nao foi possivel gerar candidatos agora. Revise manualmente ou tente novamente.</div>
+            {% elif analysis_message == "candidatos_gerados" %}
+            <div class="empty-state inline">Candidatos gerados. Eles nao alteram o contrato ate a aprovacao humana.</div>
+            {% endif %}
+            {% if apply_message == "sem_aprovacao" %}
+            <div class="empty-state inline">A aplicacao foi bloqueada porque a revisao ainda nao esta aprovada.</div>
+            {% endif %}
+            <div class="inline-actions margin-bottom">
+                <a class="btn btn-secondary" href="/documents/{{ document.id }}/download">Abrir original</a>
+            </div>
+            {% if extraction.extracted_text_preview %}
+            <div class="panel-head compact"><div><h2>Prévia do texto extraído</h2><p>Texto extraído automaticamente para apoio à conferência.</p></div></div>
+            <pre class="text-preview">{{ extraction.extracted_text_preview }}</pre>
+            {% else %}
+            <div class="empty-state inline">Texto extraído indisponível. A validação manual continua disponível.</div>
+            {% endif %}
+        </section>
+    </aside>
+
+    <div class="detail-main">
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>Candidatos para validacao</h2>
+                    <p>Estes dados sao candidatos e precisam de validacao humana. Nenhuma informacao sera aplicada ao contrato nesta etapa.</p>
+                </div>
+            </div>
+            {% if analysis_metadata %}
+            <div class="candidate-meta">
+                <span>Metodo: {{ analysis_metadata.analysis_method or "-" }}</span>
+                <span>Versao: {{ analysis_metadata.analysis_version or "-" }}</span>
+                <span>Gerado em: {{ analysis_metadata.generated_at or "-" }}</span>
+            </div>
+            {% endif %}
+            {% if analysis_warnings %}
+            <div class="candidate-warning-list">
+                {% for warning in analysis_warnings %}
+                <div>{{ warning }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if contract_candidates or clause_candidates or condition_candidates %}
+            <div class="candidate-review-grid">
+                <section class="candidate-block">
+                    <h3>Dados principais</h3>
+                    {% for key, item in contract_candidates.items() %}
+                    {% if item is mapping and (item.value or item.evidence) %}
+                    <article class="candidate-row">
+                        <div><strong>{{ key|replace("_", " ")|title }}</strong><span>Confianca {{ "%.0f"|format((item.confidence or 0) * 100) }}%</span></div>
+                        {% if item.value %}<p>{{ item.value }}</p>{% endif %}
+                        {% if item.evidence %}<blockquote>{{ item.evidence }}</blockquote>{% endif %}
+                    </article>
+                    {% endif %}
+                    {% endfor %}
+                </section>
+                <section class="candidate-block">
+                    <h3>Clausulas criticas</h3>
+                    {% for key, rows in clause_candidates.items() %}
+                    {% if rows %}
+                    <div class="candidate-group-title">{{ key|replace("_", " ")|title }}</div>
+                    {% for item in rows %}
+                    <article class="candidate-row">
+                        <div><strong>{{ item.categoria or key }}</strong><span>Confianca {{ "%.0f"|format((item.confidence or 0) * 100) }}%</span></div>
+                        {% if item.evidence %}<blockquote>{{ item.evidence }}</blockquote>{% endif %}
+                    </article>
+                    {% endfor %}
+                    {% endif %}
+                    {% endfor %}
+                </section>
+                <section class="candidate-block full">
+                    <h3>Condicoes financeiras</h3>
+                    {% if condition_candidates %}
+                    {% for item in condition_candidates %}
+                    <article class="candidate-row">
+                        <div><strong>{{ item.categoria or "outro" }}{% if item.item %} - {{ item.item }}{% endif %}</strong><span>Confianca {{ "%.0f"|format((item.confidence or 0) * 100) }}%</span></div>
+                        <p>{% if item.valor %}R$ {{ item.valor }}{% endif %}{% if item.unidade %} / {{ item.unidade }}{% endif %}</p>
+                        {% if item.evidence %}<blockquote>{{ item.evidence }}</blockquote>{% endif %}
+                    </article>
+                    {% endfor %}
+                    {% else %}
+                    <div class="empty-state inline">Nenhuma condicao financeira candidata encontrada.</div>
+                    {% endif %}
+                </section>
+            </div>
+            {% endif %}
+            <form method="post" action="/documents/{{ document.id }}/validate" class="form-grid two-cols" id="validationForm">
+                <label><span>Operadora</span><input name="contrato_operadora" value="{{ contract_data.operadora or '' }}"></label>
+                <label><span>Razao social</span><input name="contrato_razao_social" value="{{ contract_data.razao_social or '' }}"></label>
+                <label><span>CNPJ</span><input name="contrato_cnpj" value="{{ contract_data.cnpj or '' }}"></label>
+                <label><span>Registro ANS</span><input name="contrato_registro_ans" value="{{ contract_data.registro_ans or '' }}"></label>
+                <label><span>Número do contrato</span><input name="contrato_numero" value="{{ contract_data.numero_contrato or '' }}"></label>
+                <label><span>Tipo de contrato</span><input name="contrato_tipo" value="{{ contract_data.tipo_contrato or '' }}"></label>
+                <label><span>Data assinatura</span><input type="date" name="contrato_data_assinatura" value="{{ contract_data.data_assinatura or '' }}"></label>
+                <label><span>Data início</span><input type="date" name="contrato_data_inicio" value="{{ contract_data.data_inicio or '' }}"></label>
+                <label><span>Data fim</span><input type="date" name="contrato_data_fim" value="{{ contract_data.data_fim or '' }}"></label>
+                <label><span>Data-base de reajuste</span><input type="date" name="contrato_data_base" value="{{ contract_data.data_base_reajuste or '' }}"></label>
+                <label><span>Índice de reajuste</span><input name="contrato_indice" value="{{ contract_data.indice_reajuste or '' }}"></label>
+                <label><span>Percentual de reajuste</span><input name="contrato_percentual" value="{{ contract_data.percentual_reajuste or '' }}"></label>
+
+                <label><span>Prazo de faturamento</span><input name="clausula_prazo_faturamento" value="{{ clause_data.prazo_faturamento or '' }}"></label>
+                <label><span>Prazo de recurso de glosa</span><input name="clausula_prazo_recurso_glosa" value="{{ clause_data.prazo_recurso_glosa or '' }}"></label>
+                <label class="full"><span>Regras de glosa</span><textarea name="clausula_regras_glosa">{{ clause_data.regras_glosa or '' }}</textarea></label>
+                <label class="full"><span>Regras de autorização</span><textarea name="clausula_regras_autorizacao">{{ clause_data.regras_autorizacao or '' }}</textarea></label>
+                <label class="full"><span>Multas</span><textarea name="clausula_multas">{{ clause_data.multas or '' }}</textarea></label>
+                <label class="full"><span>Auditoria</span><textarea name="clausula_auditoria">{{ clause_data.auditoria or '' }}</textarea></label>
+
+                <label><span>Categoria</span><input name="condicao_categoria" value="{{ condition_data.categoria or '' }}"></label>
+                <label><span>Item</span><input name="condicao_item" value="{{ condition_data.item or '' }}"></label>
+                <label class="full"><span>Descrição</span><textarea name="condicao_descricao">{{ condition_data.descricao or '' }}</textarea></label>
+                <label><span>Valor</span><input name="condicao_valor" value="{{ condition_data.valor or '' }}"></label>
+                <label><span>Unidade</span><input name="condicao_unidade" value="{{ condition_data.unidade or '' }}"></label>
+                <label><span>Vigência início</span><input type="date" name="condicao_vigencia_inicio" value="{{ condition_data.vigencia_inicio or '' }}"></label>
+                <label><span>Vigência fim</span><input type="date" name="condicao_vigencia_fim" value="{{ condition_data.vigencia_fim or '' }}"></label>
+                <label class="full"><span>Notas da revisão</span><textarea name="review_notes">{{ extraction.review_notes or '' }}</textarea></label>
+
+                <div class="full inline-actions">
+                    <button class="btn btn-secondary" type="submit">Salvar revisão</button>
+                    <button class="btn btn-primary" type="submit" formmethod="post" formaction="/documents/{{ document.id }}/approve">Aprovar cadastro</button>
+                    <button class="btn btn-danger" type="submit" formmethod="post" formaction="/documents/{{ document.id }}/reject">Rejeitar extração</button>
+                </div>
+            </form>
+        </section>
+    </div>
+</section>
+{% endblock %}

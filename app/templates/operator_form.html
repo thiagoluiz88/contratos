@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>{{ "Editar operadora" if operator else "Nova operadora" }}</h1>
+        <p>Registre dados de contato, CNPJ, observações e status.</p>
+    </div>
+</header>
+
+<section class="panel">
+    {% if error %}<div class="empty-state inline">{{ error }}</div>{% endif %}
+    <form method="post" class="form-grid two-cols">
+        <label><span>Nome da operadora</span><input name="name" value="{{ operator.name if operator else '' }}" required></label>
+        <label><span>CNPJ</span><input name="tax_id" value="{{ operator.tax_id if operator else '' }}"></label>
+        <label><span>Contato principal</span><input name="contact_name" value="{{ operator.contact_name if operator else '' }}"></label>
+        <label><span>E-mail</span><input type="email" name="contact_email" value="{{ operator.contact_email if operator else '' }}"></label>
+        <label><span>Telefone</span><input name="contact_phone" value="{{ operator.contact_phone if operator else '' }}"></label>
+        <label class="checkbox"><input type="checkbox" name="is_active" {% if not operator or operator.is_active %}checked{% endif %}><span>Operadora ativa</span></label>
+        <label class="full"><span>Observações</span><textarea name="notes">{{ operator.notes if operator else '' }}</textarea></label>
+        <div class="full inline-actions">
+            <a class="btn btn-secondary" href="/operators">Cancelar</a>
+            <button class="btn btn-primary" type="submit">Salvar</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

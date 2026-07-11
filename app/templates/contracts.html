@@ -1,168 +1,194 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+
+{% block head %}
+{% if not has_profile(user, CONTRACT_WRITE_PROFILES) %}
+<style>
+    .js-new-contract,
+    .js-new-aditivo,
+    .row-actions button[data-action="edit"],
+    .row-actions button[data-action="more"],
+    #contractImportModal {
+        display: none !important;
+    }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
-<section class="contracts-hero glass-card">
-    <div class="contracts-hero-main">
-        <div>
-            <span class="eyebrow">Workspace contratual</span>
-            <h2>Gestao moderna da carteira de contratos</h2>
-            <p>Visualize score, risco, vigencia e qualidade da extracao em uma leitura executiva, pronta para operacao e revisao.</p>
-        </div>
-        <div class="contracts-hero-actions">
-            <a href="/upload" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Novo contrato</a>
-            <a href="/contracts/export.xlsx" class="btn btn-secondary"><i class="fa-solid fa-file-excel"></i> Exportar carteira</a>
-        </div>
+<header class="topbar contracts-topbar">
+    <div>
+        <h1>Contratos analisados</h1>
+        <p>Visualize contratos importados e acompanhe status, score e análises.</p>
     </div>
+    <div class="topbar-actions">
+        <label class="search-box global-search" aria-label="Busca global">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
+            <input id="globalContractSearch" type="search" placeholder="Buscar contratos, operadoras...">
+            <kbd>Ctrl + K</kbd>
+        </label>
+        {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+        <a class="primary-button compact" href="/contracts/import">Importar contrato</a>
+        {% endif %}
+    </div>
+</header>
 
-    <div class="contracts-summary-grid">
-        <article class="summary-tile">
-            <span>Contratos exibidos</span>
-            <strong>{{ summary.total }}</strong>
-            <small>{{ summary.operators }} operadoras na visao atual</small>
-        </article>
-        <article class="summary-tile">
-            <span>Score medio</span>
-            <strong>{{ '%.1f'|format(summary.avg_score) }}</strong>
-            <small>Panorama consolidado da carteira filtrada</small>
-        </article>
-        <article class="summary-tile">
-            <span>A vencer em 90 dias</span>
-            <strong>{{ summary.expiring_90 }}</strong>
-            <small>Contratos que pedem acompanhamento proximo</small>
-        </article>
-        <article class="summary-tile">
-            <span>Risco alto</span>
-            <strong>{{ summary.critical }}</strong>
-            <small>{{ summary.active_filters }} filtros ativos na consulta</small>
-        </article>
-    </div>
+<section class="contracts-metrics">
+    <article class="metric-card reveal"><span class="metric-icon blue">C</span><div><p>Total de contratos</p><strong>{{ contract_count or 0 }}</strong><small>Registros no PostgreSQL</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon green">A</span><div><p>Contratos ativos</p><strong>{{ contract_metrics.active }}</strong><small>Com vigência ativa</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon orange">!</span><div><p>Vencendo em 30 dias</p><strong>{{ contract_metrics.due_30 }}</strong><small>Acompanhar renovação</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon red">X</span><div><p>Vencidos</p><strong>{{ contract_metrics.expired }}</strong><small>Exigem revisão</small></div></article>
+    <article class="metric-card reveal"><span class="metric-icon green">S</span><div><p>Score médio</p><strong>{{ contract_metrics.average_score }}/100</strong><small>Média dos contratos</small></div></article>
 </section>
 
-<section class="panel glass-card contracts-filter-panel">
-    <div class="panel-head">
-        <div>
-            <h2>Filtros e governanca</h2>
-            <p>Refine a carteira por operadora, status, risco e janela de vigencia.</p>
-        </div>
-        <div class="inline-actions">
-            <a href="/contracts/export.csv" class="btn btn-secondary"><i class="fa-solid fa-file-csv"></i> CSV</a>
-            <a href="/contracts" class="btn btn-secondary"><i class="fa-solid fa-rotate-left"></i> Limpar</a>
-        </div>
+<section class="contracts-layout">
+    <div class="contracts-main">
+        <section class="panel filters-panel reveal">
+            <div class="filters-grid">
+                <label class="filter-field"><span>Buscar</span><input id="tableSearch" type="search" placeholder="Buscar..."></label>
+                <label class="filter-field">
+                    <span>Operadora</span>
+                    <select id="operatorFilter">
+                        <option value="">Todas</option>
+                        {% for operator_name in operator_names %}
+                        <option>{{ operator_name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="filter-field">
+                    <span>Status</span>
+                    <select id="statusFilter">
+                        <option value="">Todos</option>
+                        {% for status_name in contract_statuses %}
+                        <option>{{ status_name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="applied-filters">
+                <span>Filtros aplicados:</span>
+                <b id="statusBadge">Status: Todos</b>
+                <b id="periodBadge">Período: Todos</b>
+                <button id="clearFilters" type="button">Limpar filtros</button>
+            </div>
+        </section>
+
+        <section class="panel contracts-table-panel reveal">
+            <div class="table-wrap contracts-table-wrap">
+                <table class="contracts-table">
+                    <thead>
+                        <tr>
+                            <th>Contrato</th>
+                            <th>Operadora</th>
+                            <th>Responsável</th>
+                            <th>Contato</th>
+                            <th>Vigência</th>
+                            <th>Reajuste</th>
+                            <th>Status</th>
+                            <th>Score</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contractsRows">
+                        {% for contract in contract_rows %}
+                        <tr data-contract-id="{{ contract.id }}" data-contract="{{ contract.contract_number }}" data-operator="{{ contract.operator_name }}" data-status="{{ contract.status_label }}" data-score="{{ contract.score }}">
+                            <td><strong>{{ contract.contract_number }}</strong><small>{{ contract.contract_name }}</small></td>
+                            <td><span class="operator-logo {{ contract.operator_logo_class }}">{{ contract.operator_initial }}</span><strong>{{ contract.operator_name }}</strong><small>{{ contract.original_filename }}</small></td>
+                            <td><strong>{{ contract.responsible_name }}</strong><small>Responsável na operadora</small></td>
+                            <td><span>{{ contract.contact_info }}</span><small>Contato</small></td>
+                            <td><span>{{ contract.start_date }}</span><small>{{ contract.end_date }}</small></td>
+                            <td><strong>{{ contract.reajust_index }}</strong><small>Extraído do contrato</small></td>
+                            <td><span class="status-pill {{ contract.status_class }}">{{ contract.status_label }}</span></td>
+                            <td><span class="score-pill {{ contract.score_class }}">{{ contract.score }}/100</span></td>
+                            <td class="row-actions"><button data-action="view">Abrir</button><button data-action="edit">Editar</button><button data-action="more">Mais</button></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="9"><div class="empty-state inline">Nenhum contrato importado. Use o botão Importar contrato para adicionar os contratos reais.</div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <footer class="table-footer">
+                <span id="tableCounter">Mostrando {{ 1 if contract_rows else 0 }} a {{ contract_count or 0 }} de {{ contract_count or 0 }} contratos</span>
+            </footer>
+        </section>
     </div>
 
-    <form method="get" class="filters-grid contracts-filters">
-        <label class="field-group field-search">
-            <span>Busca inteligente</span>
-            <input type="text" name="search" placeholder="Contrato, operadora ou numero" value="{{ filters.search }}">
-        </label>
-        <label class="field-group">
-            <span>Operadora</span>
-            <select name="operator">
-                <option value="">Todas as operadoras</option>
-                {% for op in operators %}
-                <option value="{{ op }}" {% if filters.operator == op %}selected{% endif %}>{{ op }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <label class="field-group">
-            <span>Status</span>
-            <select name="status">
-                <option value="">Todos os status</option>
-                <option value="vigente" {% if filters.status == 'vigente' %}selected{% endif %}>Vigente</option>
-                <option value="a_vencer" {% if filters.status == 'a_vencer' %}selected{% endif %}>A vencer</option>
-                <option value="vencido" {% if filters.status == 'vencido' %}selected{% endif %}>Vencido</option>
-                <option value="critico" {% if filters.status == 'critico' %}selected{% endif %}>Critico</option>
-            </select>
-        </label>
-        <label class="field-group">
-            <span>Risco</span>
-            <select name="risk">
-                <option value="">Todos os riscos</option>
-                <option value="baixo" {% if filters.risk == 'baixo' %}selected{% endif %}>Baixo</option>
-                <option value="moderado" {% if filters.risk == 'moderado' %}selected{% endif %}>Moderado</option>
-                <option value="alto" {% if filters.risk == 'alto' %}selected{% endif %}>Alto</option>
-                <option value="muito alto" {% if filters.risk == 'muito alto' %}selected{% endif %}>Muito alto</option>
-            </select>
-        </label>
-        <label class="field-group">
-            <span>Fim de vigencia de</span>
-            <input type="date" name="start_from" value="{{ filters.start_from }}">
-        </label>
-        <label class="field-group">
-            <span>Ate</span>
-            <input type="date" name="end_to" value="{{ filters.end_to }}">
-        </label>
-        <div class="filter-submit">
-            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter"></i> Aplicar filtros</button>
-        </div>
-    </form>
-</section>
-
-<section class="panel glass-card">
-    <div class="panel-head compact">
-        <div>
-            <h2>Carteira contratual</h2>
-            <p>Leitura operacional com score, risco, vigencia e rastreabilidade por contrato.</p>
-        </div>
-    </div>
-
-    <div class="table-wrap margin-top contracts-table-wrap">
-        <table class="modern-table">
-            <thead>
-                <tr>
-                    <th>Operadora</th>
-                    <th>Contrato</th>
-                    <th>Vigencia</th>
-                    <th>Score</th>
-                    <th>Risco</th>
-                    <th>Extracao</th>
-                    <th>Acoes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in contracts %}
-                {% set meta = status_meta(c) %}
-                <tr>
-                    <td>
-                        <div class="table-primary">{{ c.operator_name or 'Nao informada' }}</div>
-                        <div class="table-note">Origem {{ c.original_filename or 'manual' }}</div>
-                    </td>
-                    <td>
-                        <div class="table-primary">{{ c.contract_name or 'Contrato sem nome' }}</div>
-                        <div class="table-note">Numero {{ c.contract_number or 'nao identificado' }}</div>
-                    </td>
-                    <td>
-                        <div class="table-primary">{{ c.start_date or '-' }} ate {{ c.end_date or '-' }}</div>
-                        <div class="contract-date-meta">
-                            <span class="pill {{ meta.tone }}">{{ meta.label }}</span>
-                            <span class="table-note">{{ c.days_until_end_view if c.days_until_end_view is not none else '-' }} dias restantes</span>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="score-cell">
-                            <strong>{{ '%.1f'|format(c.score_total or 0) }}</strong>
-                            <div class="score-inline-track">
-                                <div class="score-inline-fill" style="width: {{ c.score_total or 0 }}%;"></div>
-                            </div>
-                            <span class="table-note">{{ c.classification or 'Sem classificacao' }}</span>
-                        </div>
-                    </td>
-                    <td><span class="pill outline {{ badge_class(c.risk_level) }}">{{ c.risk_level or 'nao classificado' }}</span></td>
-                    <td>
-                        <div class="table-primary">{{ c.extraction_method or 'Nao informado' }}</div>
-                        <div class="table-note">{% if c.extraction_confidence %}Confianca {{ '%.0f'|format(c.extraction_confidence * 100) }}%{% else %}Sem percentual de confianca{% endif %}</div>
-                    </td>
-                    <td>
-                        <div class="inline-actions">
-                            <a class="btn btn-secondary btn-sm" href="/contracts/{{ c.id }}">Abrir</a>
-                            <a class="btn btn-secondary btn-sm" href="/contracts/{{ c.id }}?edit=1">Editar</a>
-                        </div>
-                    </td>
-                </tr>
+    <aside class="contracts-aside">
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Resumo por status</h2></div>
+            <div class="chart-area donut contract-status-chart"><canvas id="contractsStatusChart"></canvas></div>
+            <ul class="legend-list" id="contractsStatusLegend"></ul>
+        </article>
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Ações rápidas</h2></div>
+            <div class="quick-actions">
+                {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+                <button class="js-new-contract" type="button">Enviar contrato</button>
+                <button class="js-new-aditivo" type="button">Registrar aditivo</button>
+                {% endif %}
+                {% if has_profile(user, ANALYSIS_VIEW_PROFILES) %}
+                <a class="secondary-action" href="/analises-ia">Abrir análise</a>
+                {% endif %}
+                {% if has_profile(user, FINANCIAL_PROFILES) %}
+                <a class="secondary-action" href="/comparacoes">Comparar contratos</a>
+                {% endif %}
+            </div>
+        </article>
+        <article class="panel reveal">
+            <div class="panel-header"><h2>Principais operadoras</h2></div>
+            <ul class="operator-ranking">
+                {% for item in operator_ranking %}
+                <li><strong>{{ item.name }}</strong><span>{{ item.count }} contratos</span></li>
                 {% else %}
-                <tr><td colspan="7"><div class="empty-state inline">Nenhum contrato encontrado.</div></td></tr>
+                <li><strong>Nenhuma operadora</strong><span>Aguardando contratos reais</span></li>
                 {% endfor %}
-            </tbody>
-        </table>
-    </div>
+            </ul>
+        </article>
+    </aside>
 </section>
+
+{% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+<div class="contract-import-modal" id="contractImportModal" aria-hidden="true">
+    <div class="contract-import-card" role="dialog" aria-modal="true" aria-labelledby="contractImportTitle">
+        <button class="contract-import-close" id="closeContractImport" type="button" aria-label="Fechar">x</button>
+        <div class="contract-import-header">
+            <span class="metric-icon green">C</span>
+            <div>
+                <h2 id="contractImportTitle">Novo contrato</h2>
+                <p id="contractImportDescription">Importe PDF, DOCX, DOC, TXT, MD ou imagens digitalizadas com OCR.</p>
+            </div>
+        </div>
+        <form id="contractImportForm" class="contract-import-form">
+            <input id="contractImportMode" type="hidden" name="import_mode" value="contract">
+            <label class="contract-import-field" for="contractOperatorSelect">
+                <span id="contractOperatorLabel">Convênio</span>
+                <select id="contractOperatorSelect" name="operator_name" required>
+                    <option value="">Selecione o convênio</option>
+                    {% for operator_name in operator_names %}
+                    <option value="{{ operator_name }}">{{ operator_name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="contract-dropzone" id="contractDropzone" for="contractFileInput">
+                <input id="contractFileInput" type="file" name="file" accept=".pdf,.docx,.doc,.txt,.md,.jpg,.jpeg,.png,.tif,.tiff,image/*" hidden>
+                <span>+</span>
+                <strong id="contractDropzoneTitle">Arraste o arquivo do contrato aqui ou clique para selecionar</strong>
+                <small>Formatos: PDF, DOCX, DOC, TXT, MD, JPG, PNG e TIFF.</small>
+            </label>
+            <div class="contract-import-file" id="contractImportFile">Nenhum arquivo selecionado</div>
+            <div class="contract-import-progress" id="contractImportProgress" aria-hidden="true"><span><b id="contractImportProgressBar"></b></span><small id="contractImportProgressText">Importando contrato...</small></div>
+            <div class="contract-import-message" id="contractImportMessage" role="status"></div>
+            <div class="contract-import-actions">
+                <button class="secondary-action" id="cancelContractImport" type="button">Cancelar</button>
+                <button class="primary-button compact" id="submitContractImport" type="submit">Importar contrato</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', path='js/contracts.js') }}?v=real-data-only" defer></script>
 {% endblock %}

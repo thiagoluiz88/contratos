@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Tabelas de Referencia</h1>
+        <p>Base controlada para futuras comparacoes de defasagem. Nenhum dado de mercado e criado automaticamente.</p>
+    </div>
+    <div class="topbar-actions">
+        {% if has_profile(user, APPLY_APPROVED_EXTRACTION_PROFILES) %}
+        <a class="primary-button compact" href="/reference-tables/new">Nova referencia</a>
+        {% endif %}
+    </div>
+</header>
+
+<section class="panel">
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead><tr><th>Nome</th><th>Fonte</th><th>Versao</th><th>Vigencia</th><th>Status</th><th>Itens</th></tr></thead>
+            <tbody>
+                {% for table in tables %}
+                <tr>
+                    <td><strong>{{ table.name }}</strong></td>
+                    <td>{{ table.source or "-" }}</td>
+                    <td>{{ table.version or "-" }}</td>
+                    <td>{{ table.valid_from or "-" }} a {{ table.valid_until or "vigente" }}</td>
+                    <td><span class="status-pill {{ 'active' if table.status == 'active' else 'expired' }}">{{ table.status }}</span></td>
+                    <td>{{ item_counts.get(table.id, 0) }}</td>
+                </tr>
+                <tr>
+                    <td colspan="6">
+                        {% if has_profile(user, APPLY_APPROVED_EXTRACTION_PROFILES) %}
+                        <form method="post" action="/reference-tables/{{ table.id }}/items" class="form-grid five-cols compact-form">
+                            <input name="category" placeholder="Categoria">
+                            <input name="item" placeholder="Item" required>
+                            <input name="value" placeholder="Valor">
+                            <input name="unit" placeholder="Unidade">
+                            <button class="btn btn-secondary compact" type="submit">Adicionar item</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6"><div class="empty-state inline">Nenhuma tabela de referencia cadastrada.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

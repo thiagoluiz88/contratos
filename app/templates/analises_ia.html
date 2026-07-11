@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar contracts-topbar ai-topbar">
+    <div>
+        <h1>Análises por IA</h1>
+        <p>Análise automática do contrato importado: jurídica, tabelas, reajuste, glosas, pagamento, vigência e recomendações.</p>
+    </div>
+    <div class="topbar-actions">
+        <label class="search-box global-search" aria-label="Busca global em análises por IA">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.7-4.7a7.5 7.5 0 1 0-1.4 1.4l4.7 4.7zM4 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0"></path></svg>
+            <input id="aiGlobalSearch" type="search" placeholder="Buscar riscos, tabelas, reajuste...">
+            <kbd>Ctrl + K</kbd>
+        </label>
+        {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+        <a class="primary-button compact" href="/contracts/import">Importar contrato</a>
+        {% endif %}
+    </div>
+</header>
+
+{% if not contract %}
+<section class="panel ai-empty-panel reveal">
+    <h2>Nenhum contrato importado</h2>
+    <p>Importe um contrato na tela de Contratos para gerar a análise automática.</p>
+    <a class="primary-button compact" href="/contracts">Ir para contratos</a>
+</section>
+{% else %}
+<section class="panel ai-contract-card reveal">
+    <div class="ai-contract-icon">{{ (contract.operator_name or contract.contract_name)[:1] }}</div>
+    <div class="ai-contract-main">
+        <span>Contrato analisado</span>
+        <strong>{{ contract.contract_name }}</strong>
+        <small>Operadora: {{ contract.operator_name or "Não informada" }} · Arquivo: {{ contract.original_filename or "-" }}</small>
+    </div>
+    <span class="status-pill {{ 'active' if analysis.score >= 70 else 'warning' if analysis.score >= 50 else 'expired' }}">Risco {{ analysis.risk_label }}</span>
+    <div class="ai-contract-meta">
+        <span>Vigência</span>
+        <strong>{{ format_br_date(contract.start_date) }} a {{ format_br_date(contract.end_date) }}</strong>
+    </div>
+    <div class="ai-contract-meta">
+        <span>Última leitura</span>
+        <strong>{{ contract.created_at.strftime("%d/%m/%Y %H:%M") if contract.created_at else "-" }}</strong>
+    </div>
+    <button id="changeContract" class="secondary-action" type="button">Alterar contrato</button>
+</section>
+
+{% if has_profile(user, ANALYSIS_WRITE_PROFILES) %}
+<section class="panel ai-upload-panel reveal">
+    <div class="ai-upload-area" id="aiDropzone" role="button" tabindex="0" aria-label="Selecionar arquivo do contrato">
+        <input id="aiFileInput" type="file" accept=".pdf,.docx,.doc,.txt,.md" hidden>
+        <span class="ai-upload-icon">⇧</span>
+        <strong>Substituir arquivo para nova análise</strong>
+        <small>A análise abaixo foi gerada a partir do texto extraído do contrato importado.</small>
+    </div>
+    <div class="ai-current-file">
+        <span>Arquivo atual: <strong id="aiFileName">{{ contract.original_filename or "Contrato importado" }}</strong></span>
+        <button id="replaceFile" type="button">Substituir arquivo</button>
+    </div>
+    <aside class="ai-run-box">
+        <button id="runAiAnalysis" class="primary-button ai-run-button" type="button">Reprocessar análise</button>
+        <small>Leitura local baseada nos campos extraídos</small>
+        <div class="ai-progress" id="aiProgress" aria-hidden="true">
+            <span><b id="aiProgressBar"></b></span>
+            <small id="aiProgressText">Analisando contrato... 0%</small>
+        </div>
+    </aside>
+</section>
+{% endif %}
+
+<section class="ai-tabs reveal" aria-label="Resultados da análise">
+    <button class="active" type="button" data-tab="executivo">Resumo Executivo</button>
+    <button type="button" data-tab="falhas">Falhas Contratuais</button>
+    <button type="button" data-tab="clausulas">Cláusulas Críticas</button>
+    <button type="button" data-tab="oportunidades">Oportunidades</button>
+    <button type="button" data-tab="mercado">Tabelas e Reajuste</button>
+    <button type="button" data-tab="documento">Documento Analisado</button>
+</section>
+
+<section class="ai-results-layout">
+    <div class="ai-main-column">
+        <section class="panel ai-tab-panel active reveal" data-panel="executivo">
+            <div class="panel-header ai-section-header">
+                <div>
+                    <h2>Resumo da análise</h2>
+                    <p>Leitura automática do contrato e dos dados estruturados.</p>
+                </div>
+            </div>
+            <div class="ai-kpi-grid" id="aiKpiGrid">
+                <article class="ai-kpi-card">
+                    <div class="ai-score-ring"><span>{{ analysis.score }}</span><small>/100</small></div>
+                    <strong>Score do contrato</strong>
+                    <p>Risco {{ analysis.risk_label }}</p>
+                    <small>Quanto maior, melhor estruturado</small>
+                </article>
+                <article class="ai-kpi-card"><b>{{ analysis.failures_count }}</b><strong>Falhas identificadas</strong><p>Jurídicas e operacionais</p><small>Impacto contratual</small></article>
+                <article class="ai-kpi-card"><b>{{ analysis.critical_count }}</b><strong>Cláusulas críticas</strong><p>Exigem revisão</p><small>Risco alto ou crítico</small></article>
+                <article class="ai-kpi-card"><b>{{ analysis.opportunities_count }}</b><strong>Oportunidades</strong><p>Melhorias possíveis</p><small>Para negociação</small></article>
+                <article class="ai-kpi-card"><b>{{ analysis.compliance }}%</b><strong>Conformidade</strong><p>Completude contratual</p><small>Baseada nos campos essenciais</small></article>
+            </div>
+        </section>
+
+        <section class="ai-content-grid">
+            <article class="panel ai-failures-panel reveal ai-searchable">
+                <div class="panel-header ai-section-header">
+                    <div>
+                        <h2>Principais falhas contratuais</h2>
+                        <p>Ordenadas por risco, impacto e relevância para negociação.</p>
+                    </div>
+                </div>
+                <div class="ai-failure-list">
+                    {% for item in analysis.failures[:8] %}
+                    <div class="ai-failure-row" data-search="{{ item.title }} {{ item.description }} {{ item.reference }} {{ item.risk }}">
+                        <div><strong>{{ item.title }}</strong><small>{{ item.description }}</small></div>
+                        <span class="risk-pill {{ item.risk_class }}">{{ item.risk }}</span>
+                        <span>{{ item.impact }}</span>
+                        <span>{{ item.reference }}</span>
+                        <button class="js-ai-detail" type="button" data-detail="{{ item.action }}">Ver detalhes</button>
+                    </div>
+                    {% else %}
+                    <div class="empty-state inline">Nenhuma falha relevante identificada.</div>
+                    {% endfor %}
+                </div>
+            </article>
+
+            <article class="panel ai-critical-panel reveal ai-searchable">
+                <div class="panel-header ai-section-header">
+                    <div>
+                        <h2>Cláusulas e pontos jurídicos críticos</h2>
+                        <p>Itens fundamentais para um bom contrato.</p>
+                    </div>
+                </div>
+                <ul class="ai-critical-list">
+                    {% for item in analysis.critical_clauses %}
+                    <li data-search="{{ item.title }} {{ item.description }} {{ item.reference }}"><span><strong>{{ item.reference }} - {{ item.title }}</strong><small>{{ item.description }}</small></span><b class="risk-pill {{ item.risk_class }}">{{ item.risk }}</b></li>
+                    {% else %}
+                    <li><span><strong>Sem cláusulas críticas</strong><small>Não foram encontrados riscos críticos com os dados disponíveis.</small></span><b class="risk-pill medium">OK</b></li>
+                    {% endfor %}
+                </ul>
+            </article>
+        </section>
+
+        <section class="panel ai-tab-panel" data-panel="falhas">
+            <h2>Falhas Contratuais</h2>
+            <div class="ai-failure-list">
+                {% for item in analysis.failures %}
+                <div class="ai-failure-row" data-search="{{ item.title }} {{ item.description }}"><div><strong>{{ item.title }}</strong><small>{{ item.description }}</small></div><span class="risk-pill {{ item.risk_class }}">{{ item.risk }}</span><span>{{ item.impact }}</span><span>{{ item.reference }}</span><button class="js-ai-detail" type="button" data-detail="{{ item.action }}">Ver detalhes</button></div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="panel ai-tab-panel" data-panel="clausulas">
+            <h2>Análise Jurídica</h2>
+            <div class="contract-mini-grid analysis-grid">
+                {% for point in analysis.legal_points %}
+                <div data-search="{{ point.label }} {{ point.value }}"><span>{{ point.label }}</span><strong>{{ point.value }}</strong></div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="panel ai-tab-panel" data-panel="oportunidades">
+            <h2>Oportunidades de melhoria</h2>
+            <ol class="ai-next-steps">
+                {% for item in analysis.opportunities %}
+                <li data-search="{{ item.title }} {{ item.description }}"><strong>{{ item.title }}</strong><small>{{ item.description }} · Prioridade {{ item.priority|lower }}</small></li>
+                {% endfor %}
+            </ol>
+        </section>
+
+        <section class="panel ai-tab-panel" data-panel="mercado">
+            <h2>Tabelas e Reajuste</h2>
+            <div class="contract-mini-grid analysis-grid">
+                {% for table in analysis.tables %}
+                <div data-search="{{ table.label }} {{ table.value }}"><span>{{ table.label }}</span><strong>{{ table.value }}</strong></div>
+                {% endfor %}
+                <div data-search="Reajuste {{ contract.reajust_index or contract.adjustment_type }}"><span>Tipo de reajuste</span><strong>{{ contract.adjustment_type or contract.reajust_index or "Não identificado" }}</strong></div>
+                <div data-search="Periodicidade {{ contract.reajust_frequency }}"><span>Periodicidade</span><strong>{{ contract.reajust_frequency or "Não identificada" }}</strong></div>
+            </div>
+        </section>
+
+        <section class="panel ai-tab-panel" data-panel="documento">
+            <h2>Documento Analisado</h2>
+            <p><strong>Arquivo:</strong> {{ contract.original_filename or "-" }}</p>
+            <p><strong>Método de extração:</strong> {{ contract.extraction_method or "Não informado" }}{% if contract.extraction_confidence %} · {{ "%.0f"|format(contract.extraction_confidence * 100) }}%{% endif %}</p>
+            <div class="ai-document-excerpt">{{ analysis.document_excerpt }}</div>
+        </section>
+    </div>
+
+    <aside class="ai-side-column">
+        <article class="panel reveal">
+            <div class="panel-header ai-section-header"><div><h2>Score por dimensão</h2><p>Avaliação completa do contrato</p></div></div>
+            <div class="ai-score-bars">
+                {% for item in analysis.dimensions %}
+                <div><span>{{ item.label }} <b>{{ item.score }}/100</b></span><i><em style="width:{{ item.score }}%"></em></i></div>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="panel reveal">
+            <div class="panel-header ai-section-header"><div><h2>Recomendação da IA</h2><p>Baseada na leitura do contrato</p></div></div>
+            <div class="ai-recommendation">{{ analysis.recommendation }}</div>
+            <button id="openActionPlan" class="secondary-action ai-full-button" type="button">Ver plano de ação</button>
+        </article>
+
+        <article class="panel reveal ai-searchable">
+            <div class="panel-header"><h2>Próximos passos sugeridos</h2></div>
+            <ol class="ai-next-steps">
+                {% for item in analysis.next_steps %}
+                <li data-search="{{ item.title }} {{ item.priority }}"><strong>{{ item.title }}</strong><small>{{ item.priority }}</small></li>
+                {% endfor %}
+            </ol>
+        </article>
+    </aside>
+</section>
+
+<footer class="ai-disclaimer reveal">
+    Esta análise é uma leitura automatizada de apoio e deve ser validada pelo jurídico antes de decisões contratuais.
+</footer>
+
+<div class="ai-modal" id="aiModal" aria-hidden="true">
+    <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
+        <button id="closeAiModal" class="ai-modal-close" type="button" aria-label="Fechar">×</button>
+        <h2 id="aiModalTitle">Detalhes da análise</h2>
+        <p id="aiModalText">Revise o ponto selecionado com o jurídico e prepare contraproposta para a operadora.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='js/analises_ia.js') }}?v=20260513-upload-contract-analysis" defer></script>
+{% endblock %}

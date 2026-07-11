@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Nova Simulacao</h1>
+        <p>{{ contract.contract_name }} · preencha a tabela proposta antes de aplicar ao cadastro oficial.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="secondary-action" href="/contracts/{{ contract.id }}/terms/simulations">Voltar</a>
+    </div>
+</header>
+
+<section class="panel">
+    <div class="panel-head compact"><div><h2>Dados da simulacao</h2><p>A simulacao apenas compara cenarios. Ela nao grava contract_terms definitivos.</p></div></div>
+    <form method="post" action="/contracts/{{ contract.id }}/terms/simulations">
+        <div class="form-grid two-cols">
+            <label><span>Nome</span><input name="simulation_name" required placeholder="Aditivo julho 2026"></label>
+            <label><span>Versao base</span><input type="number" name="base_version" min="1" value="{{ base_version or '' }}" readonly><small>Versao oficial vigente usada na comparacao.</small></label>
+            <label><span>Observacoes</span><input name="notes" placeholder="Origem, contexto ou pendencias"></label>
+        </div>
+        <div class="table-wrap margin-top">
+            <table class="contracts-table compact-table">
+                <thead><tr><th>Categoria</th><th>Item</th><th>Descricao</th><th>Valor</th><th>Unidade</th><th>Inicio</th><th>Fim</th></tr></thead>
+                <tbody>
+                    {% for index in range(1, row_count + 1) %}
+                    <tr>
+                        <td><input name="category_{{ index }}" placeholder="diaria"></td>
+                        <td><input name="item_{{ index }}" placeholder="UTI"></td>
+                        <td><input name="description_{{ index }}" placeholder="Descricao curta"></td>
+                        <td><input name="reference_value_{{ index }}" placeholder="1000,00"></td>
+                        <td><input name="unit_{{ index }}" placeholder="dia"></td>
+                        <td><input type="date" name="valid_from_{{ index }}"></td>
+                        <td><input type="date" name="valid_until_{{ index }}"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="inline-actions margin-top">
+            <button class="btn btn-primary" type="submit">Criar simulacao</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

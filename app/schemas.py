@@ -57,3 +57,28 @@ class ContractRead(ContractBase):
 
     class Config:
         from_attributes = True
+
+
+class UserRegister(BaseModel):
+    username: str
+    email: str
+    password: str
+    password_confirm: str
+    full_name: str | None = None
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    email: str
+    full_name: str | None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

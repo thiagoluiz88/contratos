@@ -1,10 +1,22 @@
 .venv/
+venv/
 .tmp/
+.codex-run/
 __pycache__/
 *.pyc
+*.log
+logs/
 
+.env
+.env.local
+.env.production
 contracts.db
+*.db
+*.sqlite
+*.sqlite3
 uploads/
+backups/
+legacy_backup/
 
 .DS_Store
 Thumbs.db

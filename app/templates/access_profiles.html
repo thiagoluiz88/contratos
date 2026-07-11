@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <span class="eyebrow">Administração</span>
+        <h1>Perfis de Acesso</h1>
+        <p>Gerencie perfis usados na autorização do sistema.</p>
+    </div>
+    <a class="primary-button compact" href="/access-profiles/new">Novo perfil</a>
+</section>
+
+<section class="content-section">
+    <div class="admin-table-card">
+        <table class="contracts-table">
+            <thead><tr><th>Perfil</th><th>Descrição</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>
+                {% for profile in profiles %}
+                <tr>
+                    <td><strong>{{ profile.name }}</strong></td>
+                    <td>{{ profile.description or "-" }}</td>
+                    <td><span class="status-pill {{ 'active' if profile.is_active else 'suspended' }}">{{ "Ativo" if profile.is_active else "Inativo" }}</span></td>
+                    <td class="admin-actions">
+                        <a class="secondary-action" href="/access-profiles/{{ profile.id }}/edit">Editar</a>
+                        {% if profile.is_active and profile.name != "Administrador" %}
+                        <form method="post" action="/access-profiles/{{ profile.id }}/deactivate">
+                            <button class="secondary-action danger-action" type="submit">Desativar</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Operadoras e Convênios</h1>
+        <p>Cadastro central de operadoras, contatos e status contratual.</p>
+    </div>
+    {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+    <div class="topbar-actions"><a class="primary-button compact" href="/operators/new">Nova operadora</a></div>
+    {% endif %}
+</header>
+
+<section class="panel">
+    <div class="table-wrap">
+        <table class="contracts-table">
+            <thead>
+                <tr><th>Operadora</th><th>CNPJ</th><th>Contato</th><th>E-mail</th><th>Telefone</th><th>Status</th><th>Contratos</th><th>Ações</th></tr>
+            </thead>
+            <tbody>
+                {% for operator in operators %}
+                <tr>
+                    <td><strong>{{ operator.name }}</strong><small>{{ operator.notes or "Sem observações" }}</small></td>
+                    <td>{{ operator.tax_id or "-" }}</td>
+                    <td>{{ operator.contact_name or "-" }}</td>
+                    <td>{{ operator.contact_email or "-" }}</td>
+                    <td>{{ operator.contact_phone or "-" }}</td>
+                    <td><span class="status-pill {{ 'active' if operator.is_active else 'expired' }}">{{ "Ativa" if operator.is_active else "Inativa" }}</span></td>
+                    <td>{{ contract_counts.get(operator.id, 0) }}</td>
+                    <td class="row-actions"><a href="/operators/{{ operator.id }}/edit">Editar</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8"><div class="empty-state inline">Nenhuma operadora cadastrada.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

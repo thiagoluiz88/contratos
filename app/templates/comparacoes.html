@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar contracts-topbar comparisons-topbar">
+    <div>
+        <h1>Comparação de contratos</h1>
+        <p>Crie comparações persistentes usando os contratos cadastrados no PostgreSQL.</p>
+    </div>
+</header>
+
+<section class="panel reveal">
+    <div class="panel-header">
+        <div>
+            <h2>Nova comparação</h2>
+            <p>Selecione pelo menos dois contratos. O resultado será salvo automaticamente.</p>
+        </div>
+    </div>
+    <form method="post" action="/comparacoes" class="form-grid two-cols">
+        <label class="full">
+            <span>Título da comparação</span>
+            <input name="title" placeholder="Ex.: Contrato atual x proposta 2026">
+        </label>
+        <div class="full comparison-selected-grid">
+            {% for contract in contracts %}
+            <label class="comparison-contract-card">
+                <input type="checkbox" name="contract_ids" value="{{ contract.id }}">
+                <div>
+                    <strong>{{ contract.contract_name }}</strong>
+                    <small>{{ contract.operator_name or 'Operadora não informada' }} · Score {{ '%.1f'|format(contract.score_total or 0) }}</small>
+                </div>
+            </label>
+            {% else %}
+            <div class="empty-state inline">Importe contratos antes de criar uma comparação.</div>
+            {% endfor %}
+        </div>
+        <div class="full inline-actions">
+            <button class="primary-button compact" type="submit" {% if contracts|length < 2 %}disabled{% endif %}>Salvar comparação</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel reveal">
+    <div class="panel-header"><h2>Comparações salvas</h2></div>
+    <div class="table-wrap">
+        <table class="modern-table">
+            <thead>
+                <tr><th>Título</th><th>Contratos</th><th>Critérios</th><th>Resumo</th><th>Criada em</th></tr>
+            </thead>
+            <tbody>
+                {% for comparison in comparisons %}
+                <tr>
+                    <td><strong>{{ comparison.title }}</strong></td>
+                    <td>{{ comparison.items|length }}</td>
+                    <td>{{ comparison.criteria_count }}</td>
+                    <td>{{ comparison.summary or '-' }}</td>
+                    <td>{{ comparison.created_at.strftime('%d/%m/%Y %H:%M') if comparison.created_at else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5"><div class="empty-state inline">Nenhuma comparação salva.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

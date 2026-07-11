@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <h1>Nova Tabela de Referencia</h1>
+        <p>Cadastre uma base vazia ou manual. O sistema nao cria valores de mercado ficticios.</p>
+    </div>
+    <div class="topbar-actions"><a class="secondary-action" href="/reference-tables">Voltar</a></div>
+</header>
+
+<section class="panel">
+    <form method="post" action="/reference-tables" class="form-grid two-cols">
+        <label><span>Nome</span><input name="name" required placeholder="CBHPM interna 2026"></label>
+        <label><span>Fonte</span><input name="source" placeholder="Manual, CBHPM licenciada, tabela propria"></label>
+        <label><span>Versao</span><input name="version" placeholder="2026.1"></label>
+        <label><span>Status</span><select name="status"><option value="active">Ativa</option><option value="inactive">Inativa</option></select></label>
+        <label><span>Inicio</span><input type="date" name="valid_from"></label>
+        <label><span>Fim</span><input type="date" name="valid_until"></label>
+        <div class="inline-actions"><button class="btn btn-primary" type="submit">Criar referencia</button></div>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="topbar contracts-topbar">
+    <div>
+        <h1>Cadastro adicional</h1>
+        <p>Complete os dados operacionais do contrato importado.</p>
+    </div>
+    <div class="topbar-actions">
+        <a class="secondary-action" href="/contracts">Voltar para contratos</a>
+    </div>
+</header>
+
+<section class="additional-layout">
+    <article class="panel additional-summary">
+        <span class="metric-icon green">{{ (contract.operator_name or contract.contract_name)[:1] }}</span>
+        <div>
+            <small>Contrato selecionado</small>
+            <h2>{{ contract.contract_name }}</h2>
+            <p>{{ contract.operator_name or "Operadora não informada" }} · {{ contract.original_filename or "Arquivo não informado" }}</p>
+        </div>
+    </article>
+
+    <article class="panel additional-form-panel">
+        <div class="panel-header">
+            <h2>Dados adicionais</h2>
+            {% if saved %}<span class="status-pill active">Salvo</span>{% endif %}
+        </div>
+
+        <form class="form-grid two-cols" method="post" action="/contracts/{{ contract.id }}/additional">
+            <label>
+                <span>Responsável</span>
+                <input name="responsible_name" value="{{ contract.responsible_name or '' }}" placeholder="Nome do responsável">
+            </label>
+            <label>
+                <span>Contato</span>
+                <input name="contact_info" value="{{ contract.contact_info or '' }}" placeholder="Telefone, e-mail ou ramal">
+            </label>
+            <label class="full">
+                <span>Tipo de reajuste</span>
+                <select name="adjustment_type">
+                    <option value="">Selecione</option>
+                    {% for option in adjustment_options %}
+                    <option value="{{ option }}" {% if contract.adjustment_type == option or (not contract.adjustment_type and contract.reajust_index == option) %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="full additional-actions">
+                <button class="secondary-action" type="button" onclick="window.location.href='/contracts'">Cancelar</button>
+                {% if has_profile(user, CONTRACT_WRITE_PROFILES) %}
+                <button class="primary-button compact" type="submit">Salvar cadastro</button>
+                {% endif %}
+            </div>
+        </form>
+    </article>
+</section>
+{% endblock %}
